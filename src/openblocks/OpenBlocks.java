@@ -34,6 +34,8 @@ import cpw.mods.fml.common.network.NetworkMod;
 @NetworkMod(serverSideRequired = true, clientSideRequired = true, channels = { "OpenBlocks" }, packetHandler = PacketHandler.class)
 public class OpenBlocks {
 
+	public static final int MAX_HEIGHT = 256;
+
 	@Instance(value = "OpenBlocks")
 	public static OpenBlocks instance;
 

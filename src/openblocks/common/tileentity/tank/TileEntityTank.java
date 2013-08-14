@@ -7,6 +7,7 @@ import java.util.List;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.tileentity.TileEntity;
 import net.minecraftforge.common.ForgeDirection;
 import net.minecraftforge.liquids.ILiquidTank;
 import net.minecraftforge.liquids.ITankContainer;
@@ -22,6 +23,8 @@ import openblocks.utils.ItemUtils;
 
 public class TileEntityTank extends TileEntityTankBase implements
 		ITankContainer {
+	
+	private static final boolean COLLECTIVE_TANK_MODE = true;
 
 	public static int getTankCapacity() {
 		return LiquidContainerRegistry.BUCKET_VOLUME
@@ -160,7 +163,7 @@ public class TileEntityTank extends TileEntityTankBase implements
 
 	public boolean canReceiveLiquid(LiquidStack liquid) {
 		if (!tank.containsValidLiquid()) { return true; }
-		if (liquid == null) { return true; }
+		if (liquid == null) { return true; } /* liquid == null && otherLiquid == null == true ? */
 		LiquidStack otherLiquid = tank.getLiquid();
 		if (otherLiquid != null) { return otherLiquid.isLiquidEqual(liquid); }
 		return true;
@@ -169,16 +172,103 @@ public class TileEntityTank extends TileEntityTankBase implements
 	public LiquidTank getInternalTank() {
 		return tank;
 	}
+	
+	public int getCollectiveCapacity() {
+		/* look down, look up */
+		int capacity = 0;
+		LiquidTank internalTank = getInternalTank();
+		if(internalTank == null) return 0; /* Well what the? */
+		capacity += internalTank.getCapacity();
+		boolean upValid = true;
+		boolean downValid = true;
+		for(int i = 1; i < 128 && (upValid || downValid); i++) {
+			if(i + yCoord < OpenBlocks.MAX_HEIGHT) {
+				TileEntity te = worldObj.getBlockTileEntity(xCoord,  i + yCoord,  zCoord);
+				if(te != null && te instanceof TileEntityTank) { 
+					TileEntityTank aboveTank = (TileEntityTank)te;
+					if(aboveTank.canReceiveLiquid(internalTank.getLiquid())) {
+						capacity += aboveTank.getInternalTank().getCapacity();
+					}else{
+						upValid = false;
+					}
+				}else{ 
+					upValid = false;
+				}
+			}
+			if(yCoord - i > 0) {
+				TileEntity te = worldObj.getBlockTileEntity(xCoord,  i + yCoord,  zCoord);
+				if(te != null && te instanceof TileEntityTank) { 
+					TileEntityTank belowTank = (TileEntityTank)te;
+					if(belowTank.canReceiveLiquid(internalTank.getLiquid())) {
+						capacity += belowTank.getInternalTank().getCapacity();
+					}else{
+						downValid = false;
+					}
+				}else{
+					downValid = false;
+				}
+			}
+		}
+		return capacity;
+	}
+	
+	public int getCollectiveAmount() {
+		int amount = 0;
+		LiquidTank internalTank = getInternalTank();
+		if(internalTank == null) return 0;
+		amount += internalTank.containsValidLiquid() ? internalTank.getLiquid().amount : 0;
+		boolean upValid = true;
+		boolean downValid = true;
+		for(int i = 1; i < 128 && (upValid || downValid); i++) {
+			if(i + yCoord < OpenBlocks.MAX_HEIGHT) {
+				TileEntity te = worldObj.getBlockTileEntity(xCoord,  i + yCoord,  zCoord);
+				if(te != null && te instanceof TileEntityTank) { 
+					TileEntityTank aboveTank = (TileEntityTank)te;
+					if(aboveTank.canReceiveLiquid(internalTank.getLiquid())) {
+						amount += aboveTank.getInternalTank().containsValidLiquid() ? aboveTank.getInternalTank().getLiquid().amount : 0;
+					}else{
+						upValid = false;
+					}
+				}else{ 
+					upValid = false;
+				}
+			}
+			if(yCoord - i > 0) {
+				TileEntity te = worldObj.getBlockTileEntity(xCoord,  i + yCoord,  zCoord);
+				if(te != null && te instanceof TileEntityTank) { 
+					TileEntityTank belowTank = (TileEntityTank)te;
+					if(belowTank.canReceiveLiquid(internalTank.getLiquid())) {
+						amount += belowTank.getInternalTank().containsValidLiquid() ? belowTank.getInternalTank().getLiquid().amount : 0;
+					}else{
+						downValid = false;
+					}
+				}else{
+					downValid = false;
+				}
+			}
+		}
+		return amount;
+	}
+	
+	public int getCapacity() {
+		if(COLLECTIVE_TANK_MODE) {
+			return getCollectiveCapacity();
+		}
+		return getInternalTank().getCapacity();
+	}
 
 	public int getSpace() {
-		return getInternalTank().getCapacity() - getAmount();
+		return getCapacity() - getAmount();
 	}
 
 	public boolean isFull() {
-		return getAmount() == getInternalTank().getCapacity();
+		return getAmount() == getCapacity();
 	}
 
 	public int getAmount() {
+		if(COLLECTIVE_TANK_MODE) {
+			return getCollectiveAmount();
+		}
 		if (getInternalTank() == null || getInternalTank().getLiquid() == null) return 0;
 		return getInternalTank().getLiquid().amount;
 	}
