@@ -174,6 +174,7 @@ public class TileEntityTank extends TileEntityTankBase implements
 	}
 	
 	public int getCollectiveCapacity() {
+		if(worldObj == null) return getInternalTank().getCapacity();
 		/* look down, look up */
 		int capacity = 0;
 		LiquidTank internalTank = getInternalTank();
@@ -213,6 +214,7 @@ public class TileEntityTank extends TileEntityTankBase implements
 	}
 	
 	public int getCollectiveAmount() {
+		if(worldObj == null) return getInternalTank().getLiquid() != null ? getInternalTank().getLiquid().amount : 0;
 		int amount = 0;
 		LiquidTank internalTank = getInternalTank();
 		if(internalTank == null) return 0;
@@ -265,6 +267,11 @@ public class TileEntityTank extends TileEntityTankBase implements
 		return getAmount() == getCapacity();
 	}
 
+	private boolean isInternalFull() {
+		if (getInternalTank() == null || getInternalTank().getLiquid() == null) return false;
+		return getInternalTank().getLiquid().amount == getInternalTank().getCapacity();
+	}
+
 	public int getAmount() {
 		if(COLLECTIVE_TANK_MODE) {
 			return getCollectiveAmount();
@@ -293,6 +300,7 @@ public class TileEntityTank extends TileEntityTankBase implements
 			resource.amount -= filled;
 		}
 
+		/* 
 		// fill myself up
 		if (resource.amount > 0) {
 			filled = tank.fill(resource, doFill);
@@ -300,13 +308,14 @@ public class TileEntityTank extends TileEntityTankBase implements
 		}
 
 		// ok we cant, so lets fill the tank above
-		if (resource.amount > 0) {
+		if (isInternalFull() && resource.amount > 0) {
 			TileEntityTank above = getTankInDirection(ForgeDirection.UP);
 			if (above != null) {
 				filled = above.fill(resource, doFill, except);
 				resource.amount -= filled;
 			}
 		}
+		*/
 
 		// finally, distribute any remaining to the sides
 		if (resource.amount > 0 && canReceiveLiquid(resource)) {
