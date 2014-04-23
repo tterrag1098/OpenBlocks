@@ -1,9 +1,7 @@
 package openblocks.common.entity;
 
-import java.util.Iterator;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.WeakHashMap;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.entity.Entity;
@@ -24,43 +22,51 @@ import cpw.mods.fml.relauncher.SideOnly;
 public class EntityHangGlider extends Entity implements
 		IEntityAdditionalSpawnData {
 
-	private static Map<EntityPlayer, EntityHangGlider> gliderMap = new WeakHashMap<EntityPlayer, EntityHangGlider>();
-	private static Map<EntityPlayer, EntityHangGlider> gliderClientMap = new WeakHashMap<EntityPlayer, EntityHangGlider>();
-	
-	public static Map<EntityPlayer, EntityHangGlider> getMapForSide(boolean isRemote) {
-		return isRemote ? gliderClientMap : gliderMap;
+	private static Map<EntityPlayer, Integer> gliderMap = new WeakHashMap<EntityPlayer, Integer>();
+	private static Map<EntityPlayer, Integer> gliderClientMap = new WeakHashMap<EntityPlayer, Integer>();
+
+	public static Map<EntityPlayer, Integer> getMapForSide(boolean isRemote) {
+		return isRemote? gliderClientMap : gliderMap;
 	}
-	
+
 	public static boolean isEntityHoldingGlider(Entity player) {
 		return gliderClientMap.containsKey(player);
 	}
-	
+
 	public static boolean isPlayerOnGround(Entity player) {
-		EntityHangGlider glider = gliderClientMap.get(player);
-		return glider == null || glider.isPlayerOnGround();
+		Integer gliderId = gliderClientMap.get(player);
+		if (gliderId != null) {
+			Entity glider = player.worldObj.getEntityByID(gliderId);
+			if (glider instanceof EntityHangGlider) return ((EntityHangGlider)glider).isPlayerOnGround();
+		}
+
+		return true;
 	}
-	
+
 	@SideOnly(Side.CLIENT)
-	public static void updateGliders() {
-		Iterator<Entry<EntityPlayer, EntityHangGlider>> it = gliderClientMap.entrySet().iterator();
+	public static void updateGliders(World worldObj) {
+		Iterator<Entry<EntityPlayer, Integer>> it = gliderClientMap.entrySet().iterator();
 		while (it.hasNext()) {
-			Entry<EntityPlayer, EntityHangGlider> next = it.next();
+			Entry<EntityPlayer, Integer> next = it.next();
 			EntityPlayer player = next.getKey();
-			EntityHangGlider glider = next.getValue();
-			if (player == null ||
-				player.isDead || 
-				glider == null ||
-				glider.isDead ||
-				player.getHeldItem() == null ||
-				!(player.getHeldItem().getItem() instanceof ItemHangGlider)) {
-					it.remove();
+			Entity entity = worldObj.getEntityByID(next.getValue());
+			if (!(entity instanceof EntityHangGlider)) continue;
+			EntityHangGlider glider = (EntityHangGlider)entity;
+			if (player == null
+					|| player.isDead
+					|| glider.isDead
+					|| player.getHeldItem() == null
+					|| !(player.getHeldItem().getItem() instanceof ItemHangGlider)
+					|| player.worldObj.provider.dimensionId != glider.worldObj.provider.dimensionId) {
+				glider.setDead();
+				it.remove();
 			} else {
 				glider.fixPositions(Minecraft.getMinecraft().thePlayer);
 			}
-			
+
 		}
 	}
-	
+
 	private EntityPlayer player;
 	/*
 	 * Let the glider handle it's own disposal to centralize reference
@@ -75,7 +81,7 @@ public class EntityHangGlider extends Entity implements
 	public EntityHangGlider(World world, EntityPlayer player) {
 		this(world);
 		this.player = player;
-		gliderMap.put(player, this);
+		gliderMap.put(player, entityId);
 	}
 
 	@Override
@@ -86,7 +92,7 @@ public class EntityHangGlider extends Entity implements
 	public void despawnGlider() {
 		shouldDespawn = true;
 	}
-	
+
 	public boolean isPlayerOnGround() {
 		return this.dataWatcher.getWatchableObjectByte(2) == 1;
 	}
@@ -97,13 +103,12 @@ public class EntityHangGlider extends Entity implements
 			setDead();
 		} else {
 			if (!worldObj.isRemote) {
-				this.dataWatcher.updateObject(2, Byte.valueOf((byte)(player.onGround ? 1 : 0)));
+				this.dataWatcher.updateObject(2, Byte.valueOf((byte)(player.onGround? 1 : 0)));
 			}
 			ItemStack held = player.getHeldItem();
 			if (player.isDead || held == null || held.getItem() == null
 					|| held.getItem() != OpenBlocks.Items.hangGlider
-					|| shouldDespawn) {
-				
+					|| shouldDespawn || player.dimension != this.dimension) {
 				getMapForSide(worldObj.isRemote).remove(player);
 				setDead();
 			} else {
@@ -152,7 +157,6 @@ public class EntityHangGlider extends Entity implements
 			this.prevRotationPitch = player.prevRotationPitch;
 			this.rotationPitch = player.rotationPitch;
 
-
 			if (player != thePlayer) {
 				this.posY += 1.2;
 				this.prevPosY += 1.2;
@@ -179,13 +183,22 @@ public class EntityHangGlider extends Entity implements
 
 	@Override
 	public void writeSpawnData(ByteArrayDataOutput data) {
-		data.writeUTF(player.username);
+		if (player != null) {
+			data.writeUTF(player.username);
+		} else {
+			data.writeUTF("[none]");
+		}
 	}
 
 	@Override
 	public void readSpawnData(ByteArrayDataInput data) {
-		player = worldObj.getPlayerEntityByName(data.readUTF());
-		gliderClientMap.put(player, this);
+		String username = data.readUTF();
+		if ("[none]".equals(username)) {
+			setDead();
+		} else {
+			player = worldObj.getPlayerEntityByName(username);
+			gliderClientMap.put(player, entityId);
+		}
 	}
 
 }

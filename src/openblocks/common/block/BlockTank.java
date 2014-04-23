@@ -1,26 +1,24 @@
 package openblocks.common.block;
 
-import net.minecraft.block.Block;
+import java.util.List;
+
 import net.minecraft.block.material.Material;
-import net.minecraft.entity.item.EntityItem;
-import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.tileentity.TileEntity;
+import net.minecraft.util.MovingObjectPosition;
 import net.minecraft.world.IBlockAccess;
 import net.minecraft.world.World;
 import net.minecraftforge.common.ForgeDirection;
 import openblocks.Config;
-import openblocks.Log;
 import openblocks.OpenBlocks;
-import openblocks.common.item.ItemTankBlock;
 import openblocks.common.tileentity.TileEntityTank;
+import openmods.utils.ItemUtils;
 
 public class BlockTank extends OpenBlock {
 
 	public BlockTank() {
 		super(Config.blockTankId, Material.ground);
-		setupBlock(this, "tank", TileEntityTank.class, ItemTankBlock.class);
 	}
 
 	@Override
@@ -39,18 +37,8 @@ public class BlockTank extends OpenBlock {
 	}
 
 	@Override
-	public boolean renderAsNormalBlock() {
+	public boolean shouldRenderBlock() {
 		return false;
-	}
-
-	@Override
-	public int getRenderType() {
-		return OpenBlocks.renderId;
-	}
-
-	@Override
-	public boolean canPlaceBlockOnSide(World world, int x, int y, int z, ForgeDirection side) {
-		return true;
 	}
 
 	@Override
@@ -59,83 +47,44 @@ public class BlockTank extends OpenBlock {
 	}
 
 	@Override
-	public void onBlockHarvested(World par1World, int par2, int par3, int par4, int par5, EntityPlayer par6EntityPlayer) {
-		// System.out.println(getTileEntity(par1World, par2, par3, par3,
-		// TileEntityTank.class));
+	protected void getCustomTileEntityDrops(TileEntity te, List<ItemStack> result) {
+		ItemStack stack = new ItemStack(OpenBlocks.Blocks.tank);
+		if (!(te instanceof TileEntityTank)) return;
+		TileEntityTank tank = (TileEntityTank)te;
+		if (tank.getTank().getFluidAmount() > 10) {
+			NBTTagCompound tankTag = tank.getItemNBT();
+
+			NBTTagCompound itemTag = ItemUtils.getItemTag(stack);
+			itemTag.setCompoundTag("tank", tankTag);
+		}
+		result.add(stack);
+	}
+
+	@Override
+	protected boolean hasNormalDrops() {
+		return false;
 	}
 
 	@Override
 	public int getLightValue(IBlockAccess world, int x, int y, int z) {
 		if (!Config.tanksEmitLight) return 0;
-		TileEntity ent = world.getBlockTileEntity(x, y, z);
-		if (ent == null) return 0;
-		if (ent instanceof TileEntityTank) {
-			TileEntityTank tank = (TileEntityTank)ent;
-			if (tank.containsValidLiquid()) {
-				try {
-					int blockId = tank.getClientLiquidId();
-					if(blockId < 0 || blockId > Block.blocksList.length) return 0;
-					if (Block.blocksList[blockId] == null) return 0;
-					return (int)Math.min(Block.lightValue[blockId], Math.max(0, 5 + tank.getPercentFull() * 15));
-				}catch(Exception e) {
-					Log.warn(e, "Hello, It's OpenBlocks here. We've got exception at (%d,%d,%d). Please report this to the OpenMods team, they'll patch this bug up as soon as possible", x, y, z);
-					return 0;
-				}
-			}
-		}
+		TileEntityTank tile = getTileEntity(world, x, y, z, TileEntityTank.class);
+		if (tile != null) { return tile.getFluidLightLevel(); }
 		return 0;
 	}
 
 	@Override
-	public int getLightOpacity(World world, int x, int y, int z) {
-		if (!Config.tanksAreTransparent) return 16;
-		if (!Config.tanksHaveDynamicTransparency) return 0;
-		/*
-		 * As per docs, the tile entity is not guaranteed to exist at the time
-		 * of calling
-		 */
-		TileEntity ent = world.getBlockTileEntity(x, y, z);
-		if (ent == null) return 16;
-		if (ent instanceof TileEntityTank) {
-			TileEntityTank tank = (TileEntityTank)ent;
-			if (tank.containsValidLiquid()) {
-				return (int)Math.min(16, Math.max(0, (tank.getPercentFull() * 16)));
-			} else {
-				return 0;
-			}
+	public ItemStack getPickBlock(MovingObjectPosition target, World world, int x, int y, int z) {
+		ItemStack result = new ItemStack(this);
+		TileEntityTank tile = getTileEntity(world, x, y, z, TileEntityTank.class);
+		if (tile != null) {
+			NBTTagCompound tankTag = tile.getItemNBT();
+			if (tankTag.hasKey("Amount")) tankTag.setInteger("Amount", TileEntityTank.getTankCapacity());
+
+			NBTTagCompound nbt = ItemUtils.getItemTag(result);
+			nbt.setCompoundTag("tank", tankTag);
 		}
-		return 255;
+		return result;
 	}
 
-	@Override
-	public boolean removeBlockByPlayer(World world, EntityPlayer player, int x, int y, int z) {
-		if (!world.isRemote
-				&& world.getGameRules().getGameRuleBooleanValue("doTileDrops")) {
-			ItemStack itemStack = new ItemStack(OpenBlocks.Blocks.tank);
-			TileEntityTank tank = getTileEntity(world, x, y, z, TileEntityTank.class);
-			/*
-			 * Maybe you lose a small amount of liquid, but you ARE breaking a
-			 * block here
-			 */
-			if (tank != null && tank.getAmount() > 10) {
-				NBTTagCompound nbt = new NBTTagCompound();
-				NBTTagCompound tankTag = tank.getItemNBT();
-				nbt.setCompoundTag("tank", tankTag);
-				itemStack.setTagCompound(nbt);
-			}
-			float f = 0.7F;
-			float d0 = world.rand.nextFloat() * f + (1.0F - f) * 0.5F;
-			float d1 = world.rand.nextFloat() * f + (1.0F - f) * 0.5F;
-			float d2 = world.rand.nextFloat() * f + (1.0F - f) * 0.5F;
-			EntityItem entityitem = new EntityItem(world, x + d0, y + d1, z + d2, itemStack);
-			entityitem.delayBeforeCanPickup = 10;
-			world.spawnEntityInWorld(entityitem);
-		}
-		return world.setBlockToAir(x, y, z);
-	}
-
-	@Override
-	protected void dropBlockAsItem_do(World world, int x, int y, int z, ItemStack itemStack) {
-
-	}
 }

@@ -1,195 +1,219 @@
 package openblocks.common.tileentity;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
+import net.minecraft.command.IEntitySelector;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.item.EntityItem;
+import net.minecraft.entity.item.EntityXPOrb;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.inventory.IInventory;
+import net.minecraft.inventory.ISidedInventory;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraftforge.common.ForgeDirection;
+import net.minecraftforge.fluids.FluidStack;
+import net.minecraftforge.fluids.IFluidHandler;
+import net.minecraftforge.fluids.IFluidTank;
 import openblocks.OpenBlocks;
-import openblocks.common.GenericInventory;
-import openblocks.common.api.IAwareTile;
-import openblocks.integration.ModuleBuildCraft;
-import openblocks.utils.InventoryUtils;
-import cpw.mods.fml.common.Loader;
+import openblocks.client.gui.GuiVacuumHopper;
+import openblocks.common.container.ContainerVacuumHopper;
+import openblocks.common.entity.EntityItemProjectile;
+import openmods.GenericInventory;
+import openmods.IInventoryProvider;
+import openmods.OpenMods;
+import openmods.api.IActivateAwareTile;
+import openmods.api.IHasGui;
+import openmods.include.IExtendable;
+import openmods.include.IncludeInterface;
+import openmods.liquids.SidedFluidHandler;
+import openmods.sync.*;
+import openmods.tileentity.SyncedTileEntity;
+import openmods.utils.EnchantmentUtils;
+import openmods.utils.InventoryUtils;
+import openmods.utils.SidedInventoryAdapter;
 
-public class TileEntityVacuumHopper extends OpenTileEntity implements IInventory, IAwareTile {
+import com.google.common.collect.Lists;
 
-	private GenericInventory inventory = new GenericInventory("vacuumhopper", true, 10);
+public class TileEntityVacuumHopper extends SyncedTileEntity implements IInventoryProvider, IActivateAwareTile, IHasGui, IExtendable, IEntitySelector {
+
+	private static final int TANK_CAPACITY = EnchantmentUtils.XPToLiquidRatio(EnchantmentUtils.getExperienceForLevel(5));
+
+	private SyncableTank tank;
+	public SyncableFlags xpOutputs;
+	public SyncableFlags itemOutputs;
+	public SyncableBoolean vacuumDisabled;
+
+	private final GenericInventory inventory = new GenericInventory("vacuumhopper", true, 10);
+
+	@IncludeInterface(ISidedInventory.class)
+	private final SidedInventoryAdapter sided = new SidedInventoryAdapter(inventory);
+
+	@IncludeInterface
+	private final IFluidHandler tankWrapper = new SidedFluidHandler.Source(xpOutputs, tank);
+
+	@Override
+	protected void createSyncedFields() {
+		tank = new SyncableTank(TANK_CAPACITY, OpenBlocks.XP_FLUID);
+		xpOutputs = new SyncableFlags();
+		itemOutputs = new SyncableFlags();
+		vacuumDisabled = new SyncableBoolean();
+	}
+
+	public TileEntityVacuumHopper() {
+		sided.registerAllSlots(itemOutputs, false, true);
+	}
+
+	public SyncableFlags getXPOutputs() {
+		return xpOutputs;
+	}
+
+	public SyncableFlags getItemOutputs() {
+		return itemOutputs;
+	}
+
+	public IFluidTank getTank() {
+		return tank;
+	}
+
+	@Override
+	public boolean isEntityApplicable(Entity entity) {
+		if (entity.isDead) return false;
+
+		if (entity instanceof EntityItemProjectile) return entity.motionY < 0.01;
+
+		if (entity instanceof EntityItem) {
+			ItemStack stack = ((EntityItem)entity).getEntityItem();
+			return InventoryUtils.testInventoryInsertion(inventory, stack) > 0;
+		}
+
+		if (entity instanceof EntityXPOrb) return tank.getSpace() > 0;
+
+		return false;
+	}
 
 	@Override
 	public void updateEntity() {
 		super.updateEntity();
+
+		if (vacuumDisabled.getValue()) return;
 
 		if (worldObj.isRemote) {
 			worldObj.spawnParticle("portal", xCoord + 0.5, yCoord + 0.5, zCoord + 0.5, worldObj.rand.nextDouble() - 0.5, worldObj.rand.nextDouble() - 1.0, worldObj.rand.nextDouble() - 0.5);
 		}
 
 		@SuppressWarnings("unchecked")
-		List<EntityItem> surroundingItems = worldObj.getEntitiesWithinAABB(EntityItem.class, getBB().expand(3, 3, 3));
+		List<Entity> interestingItems = worldObj.selectEntitiesWithinAABB(Entity.class, getBB().expand(3, 3, 3), this);
 
-		for(EntityItem item : surroundingItems) {
+		for (Entity entity : interestingItems) {
+			double x = (xCoord + 0.5D - entity.posX);
+			double y = (yCoord + 0.5D - entity.posY);
+			double z = (zCoord + 0.5D - entity.posZ);
 
-			if (!item.isDead) {
-
-				double x = (xCoord + 0.5D - item.posX) / 15.0D;
-				double y = (yCoord + 0.5D - item.posY) / 15.0D;
-				double z = (zCoord + 0.5D - item.posZ) / 15.0D;
-
-				double distance = Math.sqrt(x * x + y * y + z * z);
-				double var11 = 1.0D - distance;
+			double distance = Math.sqrt(x * x + y * y + z * z);
+			if (distance < 1.1) {
+				onEntityCollidedWithBlock(entity);
+			} else {
+				double var11 = 1.0 - distance / 15.0;
 
 				if (var11 > 0.0D) {
 					var11 *= var11;
-					item.motionX += x / distance * var11 * 0.05;
-					item.motionY += y / distance * var11 * 0.2;
-					item.motionZ += z / distance * var11 * 0.05;
+					entity.motionX += x / distance * var11 * 0.05;
+					entity.motionY += y / distance * var11 * 0.2;
+					entity.motionZ += z / distance * var11 * 0.05;
 				}
+			}
+
+		}
+
+		if (!worldObj.isRemote) outputToNeighbors();
+	}
+
+	private void outputToNeighbors() {
+		tank.autoOutputToSides(OpenMods.proxy, 50, this, xpOutputs);
+		if (OpenMods.proxy.getTicks(worldObj) % 10 == 0) autoInventoryOutput();
+	}
+
+	private void autoInventoryOutput() {
+		int firstUsedSlot = -1;
+		for (int i = 0; i < inventory.getSizeInventory(); i++) {
+			if (inventory.getStackInSlot(i) != null) {
+				firstUsedSlot = i;
+				break;
 			}
 		}
 
-		if (!worldObj.isRemote) {
-			if (worldObj.getTotalWorldTime() % 10 == 0) {
+		if (firstUsedSlot < 0) return;
 
-				TileEntity tileOnSurface = getTileInDirection(getSurface());
+		List<Integer> slots = Lists.newArrayList(getItemOutputs().getActiveSlots());
+		Collections.shuffle(slots);
 
-				int slotId = InventoryUtils.getSlotIndexOfNextStack(this);
-				if (slotId > -1) {
-					ItemStack nextStack = getStackInSlot(slotId);
-					nextStack = nextStack.copy();
-					if (tileOnSurface instanceof IInventory) {
-						InventoryUtils.insertItemIntoInventory((IInventory) tileOnSurface, nextStack);
-					}else {
-						if (Loader.isModLoaded(openblocks.Mods.BUILDCRAFT)) {
-							int inserted = ModuleBuildCraft.tryAcceptIntoPipe(tileOnSurface, nextStack, getSurface());
-							nextStack.stackSize -= inserted;
-						}
-					}
-					if (nextStack != null) {
-						if (nextStack.stackSize > 0) {
-							setInventorySlotContents(slotId, nextStack);
-						} else {
-							setInventorySlotContents(slotId, null);
-						}
-					}
-				}
+		for (Integer dir : slots) {
+			ForgeDirection directionToOutputItem = ForgeDirection.getOrientation(dir);
+			TileEntity tileOnSurface = getTileInDirection(directionToOutputItem);
+			if (InventoryUtils.moveItemInto(inventory, firstUsedSlot, tileOnSurface, -1, 64, directionToOutputItem, true) > 0) {
+				worldObj.markBlockForUpdate(xCoord, yCoord, zCoord);
+				break;
 			}
 		}
 	}
 
-	public ForgeDirection getSurface() {
-		if (getFlag1()) {
-			return ForgeDirection.DOWN;
-		}else if (getFlag2()) {
-			return ForgeDirection.UP;
-		}else {
-			return getRotation();
-		}
+	@Override
+	public Object getServerGui(EntityPlayer player) {
+		return new ContainerVacuumHopper(player.inventory, this);
 	}
 
 	@Override
-	public int getSizeInventory() {
-		return inventory.getSizeInventory();
+	public Object getClientGui(EntityPlayer player) {
+		return new GuiVacuumHopper(new ContainerVacuumHopper(player.inventory, this));
 	}
 
 	@Override
-	public ItemStack getStackInSlot(int i) {
-		return inventory.getStackInSlot(i);
-	}
-
-	@Override
-	public ItemStack decrStackSize(int i, int j) {
-		return inventory.decrStackSize(i, j);
-	}
-
-	@Override
-	public ItemStack getStackInSlotOnClosing(int i) {
-		return inventory.getStackInSlotOnClosing(i);
-	}
-
-	@Override
-	public void setInventorySlotContents(int i, ItemStack itemstack) {
-		inventory.setInventorySlotContents(i, itemstack);
-	}
-
-	@Override
-	public String getInvName() {
-		return inventory.getInvName();
-	}
-
-	@Override
-	public boolean isInvNameLocalized() {
-		return inventory.isInvNameLocalized();
-	}
-
-	@Override
-	public int getInventoryStackLimit() {
-		return inventory.getInventoryStackLimit();
-	}
-
-	@Override
-	public boolean isUseableByPlayer(EntityPlayer entityplayer) {
-		return inventory.isUseableByPlayer(entityplayer);
-	}
-
-	@Override
-	public void openChest() {}
-
-	@Override
-	public void closeChest() {}
-
-	@Override
-	public boolean isItemValidForSlot(int i, ItemStack itemstack) {
-		return inventory.isItemValidForSlot(i, itemstack);
-	}
-
-	@Override
-	public void onBlockBroken() {}
-
-	@Override
-	public void onBlockAdded() {}
-
-	@Override
-	public boolean onBlockActivated(EntityPlayer player, int side, float hitX, float hitY, float hitZ) {
-		if (player.isSneaking()) { return false; }
-		if (!worldObj.isRemote) {
-			openGui(player, OpenBlocks.Gui.VacuumHopper);
-		}
+	public boolean canOpenGui(EntityPlayer player) {
 		return true;
 	}
 
 	@Override
-	public void onNeighbourChanged(int blockId) {}
-
-	@Override
-	public void onBlockPlacedBy(EntityPlayer player, ForgeDirection side, ItemStack stack, float hitX, float hitY, float hitZ) {
-		ForgeDirection surface = side.getOpposite();
-		setRotation(side.getOpposite());
-		setFlag1(surface == ForgeDirection.DOWN);
-		setFlag2(surface == ForgeDirection.UP);
-		sync();
-	}
-
-	@Override
-	public boolean onBlockEventReceived(int eventId, int eventParam) {
+	public boolean onBlockActivated(EntityPlayer player, int side, float hitX, float hitY, float hitZ) {
+		if (player.isSneaking()) {
+			if (player.inventory.getStackInSlot(player.inventory.currentItem) == null) {
+				vacuumDisabled.toggle();
+				return true;
+			}
+		}
 		return false;
 	}
 
 	public void onEntityCollidedWithBlock(Entity entity) {
-		if (!worldObj.isRemote && entity instanceof EntityItem) {
-			EntityItem item = (EntityItem) entity;
-			ItemStack stack = item.getEntityItem().copy();
-			InventoryUtils.insertItemIntoInventory(inventory, stack);
-			if (stack.stackSize == 0) {
-				item.setDead();
-			}else {
-				item.setEntityItemStack(stack);
+		if (!worldObj.isRemote) {
+			if (entity instanceof EntityItem && !entity.isDead) {
+				EntityItem item = (EntityItem)entity;
+				ItemStack stack = item.getEntityItem().copy();
+				InventoryUtils.insertItemIntoInventory(inventory, stack);
+				if (stack.stackSize == 0) {
+					item.setDead();
+				} else {
+					item.setEntityItemStack(stack);
+				}
+			} else if (entity instanceof EntityXPOrb) {
+				if (tank.getSpace() > 0) {
+					FluidStack newFluid = new FluidStack(OpenBlocks.Fluids.XPJuice, EnchantmentUtils.XPToLiquidRatio(((EntityXPOrb)entity).getXpValue()));
+					tank.fill(newFluid, true);
+					entity.setDead();
+				}
 			}
 		}
+	}
+
+	@Override
+	public void onSynced(Set<ISyncableObject> changes) {}
+
+	@Override
+	public IInventory getInventory() {
+		return inventory;
 	}
 
 	@Override
@@ -203,5 +227,4 @@ public class TileEntityVacuumHopper extends OpenTileEntity implements IInventory
 		super.readFromNBT(tag);
 		inventory.readFromNBT(tag);
 	}
-
 }

@@ -10,22 +10,22 @@ import net.minecraft.world.World;
 import openblocks.OpenBlocks.Blocks;
 import openblocks.OpenBlocks.Items;
 import openblocks.common.item.ItemImaginary;
-import openblocks.utils.ItemUtils;
+import openmods.utils.ItemUtils;
 
 import com.google.common.collect.Lists;
 
 public class CrayonGlassesRecipe extends ShapelessRecipes {
 
 	private static List<ItemStack> createFakeIngredientsList() {
-		ItemStack block = new ItemStack(Blocks.imaginary);
+		ItemStack block = new ItemStack(Blocks.imaginary, 1, ItemImaginary.DAMAGE_CRAYON);
 		ItemImaginary.setupValues(0x00FFFF, block);
 		return Lists.newArrayList(new ItemStack(Item.paper), block);
 	}
-	
+
 	private static ItemStack createFakeResult() {
-		return Items.crayonGlasses.createCrayon(0x00FFFF);
+		return Items.crayonGlasses.createCrayonGlasses(0x00FFFF);
 	}
-	
+
 	public CrayonGlassesRecipe() {
 		super(createFakeResult(), createFakeIngredientsList()); // just for NEI
 	}
@@ -34,25 +34,23 @@ public class CrayonGlassesRecipe extends ShapelessRecipes {
 	public boolean matches(InventoryCrafting inv, World world) {
 		boolean gotCrayon = false;
 		boolean gotPaper = false;
-		
+
 		for (int i = 0; i < inv.getSizeInventory(); i++) {
 			ItemStack stack = inv.getStackInSlot(i);
 			if (stack != null) {
 				if (stack.getItem() instanceof ItemImaginary) {
-					if (gotCrayon || !ItemImaginary.hasUses(stack))
-						return false;
-					
-					gotCrayon = true; 
+					if (gotCrayon
+							|| ItemImaginary.getUses(stack) < ItemImaginary.CRAFTING_COST) return false;
+
+					gotCrayon = true;
 				} else if (stack.getItem() == Item.paper) {
-					if (gotPaper)
-						return false;
-					
+					if (gotPaper) return false;
+
 					gotPaper = true;
-				} else
-					return false;
+				} else return false;
 			}
 		}
-		
+
 		return gotCrayon && gotPaper;
 	}
 
@@ -62,10 +60,10 @@ public class CrayonGlassesRecipe extends ShapelessRecipes {
 			ItemStack stack = inv.getStackInSlot(i);
 			if (stack != null && stack.getItem() instanceof ItemImaginary) {
 				Integer color = ItemUtils.getInt(stack, ItemImaginary.TAG_COLOR);
-				return Items.crayonGlasses.createCrayon(color);
+				return Items.crayonGlasses.createCrayonGlasses(color);
 			}
 		}
-		
+
 		return null;
 	}
 

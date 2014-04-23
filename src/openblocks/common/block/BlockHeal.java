@@ -5,13 +5,16 @@ import net.minecraft.world.IBlockAccess;
 import net.minecraft.world.World;
 import net.minecraftforge.common.ForgeDirection;
 import openblocks.Config;
-import openblocks.common.tileentity.TileEntityHealBlock;
 
 public class BlockHeal extends OpenBlock {
 
 	public BlockHeal() {
 		super(Config.blockHealId, Material.ground);
-		setupBlock(this, "heal", TileEntityHealBlock.class);
+	}
+
+	@Override
+	public boolean shouldRenderBlock() {
+		return true;
 	}
 
 	@Override

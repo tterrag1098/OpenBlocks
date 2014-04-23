@@ -1,58 +1,43 @@
 package openblocks.common.tileentity;
 
-import java.util.List;
+import java.util.Set;
 
 import net.minecraft.block.Block;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.util.Icon;
 import net.minecraftforge.common.ForgeDirection;
 import openblocks.OpenBlocks;
-import openblocks.common.api.IAwareTile;
-import openblocks.common.api.ISurfaceAttachment;
 import openblocks.common.block.BlockFlag;
-import openblocks.sync.ISyncableObject;
-import openblocks.sync.SyncableFloat;
-import openblocks.sync.SyncableInt;
-import openblocks.utils.BlockUtils;
+import openmods.api.IActivateAwareTile;
+import openmods.api.IPlaceAwareTile;
+import openmods.api.ISurfaceAttachment;
+import openmods.sync.ISyncableObject;
+import openmods.sync.SyncableFloat;
+import openmods.sync.SyncableInt;
+import openmods.tileentity.SyncedTileEntity;
+import openmods.utils.BlockUtils;
 import cpw.mods.fml.relauncher.Side;
 import cpw.mods.fml.relauncher.SideOnly;
 
-public class TileEntityFlag extends NetworkedTileEntity implements
-		ISurfaceAttachment, IAwareTile {
+public class TileEntityFlag extends SyncedTileEntity implements ISurfaceAttachment, IPlaceAwareTile, IActivateAwareTile {
 
-	public enum Keys {
-		angle, colorIndex
-	}
+	private SyncableFloat angle;
+	private SyncableInt colorIndex;
 
-	private SyncableFloat angle = new SyncableFloat(0.0f);
-	private SyncableInt colorIndex = new SyncableInt(0);
+	public TileEntityFlag() {}
 
-	public TileEntityFlag() {
-		addSyncedObject(Keys.angle, angle);
-		addSyncedObject(Keys.colorIndex, colorIndex);
+	@Override
+	protected void createSyncedFields() {
+		angle = new SyncableFloat(0.0f);
+		colorIndex = new SyncableInt(0);
 	}
 
 	@Override
 	protected void initialize() {}
 
 	@Override
-	public void onSynced(List<ISyncableObject> changes) {}
-
-	@Override
-	public void readFromNBT(NBTTagCompound tag) {
-		super.readFromNBT(tag);
-		colorIndex.readFromNBT(tag, "color");
-		angle.readFromNBT(tag, "angle");
-	}
-
-	@Override
-	public void writeToNBT(NBTTagCompound tag) {
-		super.writeToNBT(tag);
-		colorIndex.writeToNBT(tag, "color");
-		angle.writeToNBT(tag, "angle");
-	}
+	public void onSynced(Set<ISyncableObject> changes) {}
 
 	public Icon getIcon() {
 		return OpenBlocks.Blocks.flag.getIcon(0, 0);
@@ -66,14 +51,6 @@ public class TileEntityFlag extends NetworkedTileEntity implements
 		angle.setValue(ang);
 	}
 
-	public void setOnGround(boolean onGround) {
-		setFlag1(onGround);
-	}
-
-	public boolean isOnGround() {
-		return getFlag1();
-	}
-
 	public int getColor() {
 		if (colorIndex.getValue() >= BlockFlag.COLORS.length) colorIndex.setValue(0);
 		return BlockFlag.COLORS[colorIndex.getValue()];
@@ -81,24 +58,12 @@ public class TileEntityFlag extends NetworkedTileEntity implements
 
 	@Override
 	public ForgeDirection getSurfaceDirection() {
-		ForgeDirection rotation;
-		if (getFlag1()) {
-			rotation = ForgeDirection.DOWN;
-		} else {
-			rotation = getRotation();
-		}
-		return rotation;
+		return getRotation();
 	}
 
 	public float getAngle() {
 		return angle.getValue();
 	}
-
-	@Override
-	public void onBlockBroken() {}
-
-	@Override
-	public void onBlockAdded() {}
 
 	@Override
 	public boolean onBlockActivated(EntityPlayer player, int side, float hitX, float hitY, float hitZ) {
@@ -114,27 +79,15 @@ public class TileEntityFlag extends NetworkedTileEntity implements
 	}
 
 	@Override
-	public void onNeighbourChanged(int blockId) {}
-
-	@Override
 	public void onBlockPlacedBy(EntityPlayer player, ForgeDirection side, ItemStack stack, float hitX, float hitY, float hitZ) {
 		float ang = player.rotationYawHead;
-		ForgeDirection surface = side.getOpposite();
-
-		if (surface != ForgeDirection.DOWN) {
+		ForgeDirection rotation = getRotation();
+		if (rotation != ForgeDirection.DOWN) {
 			ang = -BlockUtils.getRotationFromDirection(side.getOpposite());
 		}
-
 		setAngle(ang);
 		setColorIndex(stack.getItemDamage());
-		setRotation(side.getOpposite());
-		setOnGround(surface == ForgeDirection.DOWN);
 		sync();
-	}
-
-	@Override
-	public boolean onBlockEventReceived(int eventId, int eventParam) {
-		return false;
 	}
 
 	@Override

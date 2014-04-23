@@ -1,34 +1,38 @@
 package openblocks.common.tileentity;
 
-import java.util.List;
+import java.util.Set;
 
-import net.minecraft.entity.Entity;
+import net.minecraft.block.Block;
 import net.minecraft.entity.item.EntityItem;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.inventory.IInventory;
 import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.util.AxisAlignedBB;
-import net.minecraft.util.Vec3;
+import net.minecraft.util.ChatMessageComponent;
+import net.minecraft.world.WorldServer;
 import net.minecraftforge.common.ForgeDirection;
-import openblocks.common.api.IAwareTile;
-import openblocks.common.entity.EntityCannon;
-import openblocks.sync.ISyncableObject;
-import openblocks.sync.SyncableDouble;
-import openblocks.sync.SyncableInt;
-import openblocks.utils.InventoryUtils;
+import openblocks.api.IPointable;
+import openblocks.common.entity.EntityItemProjectile;
+import openmods.api.ISurfaceAttachment;
+import openmods.network.events.TileEntityMessageEventPacket;
+import openmods.sync.ISyncableObject;
+import openmods.sync.SyncableDouble;
+import openmods.tileentity.SyncedTileEntity;
+import openmods.utils.InventoryUtils;
+import openmods.utils.render.GeometryUtils;
 import cpw.mods.fml.relauncher.Side;
 import cpw.mods.fml.relauncher.SideOnly;
 
-public class TileEntityCannon extends NetworkedTileEntity implements IAwareTile {
+public class TileEntityCannon extends SyncedTileEntity implements IPointable, ISurfaceAttachment {
 
+	private static final int YAW_CHANGE_SPEED = 3;
+	public SyncableDouble targetPitch;
+	public SyncableDouble targetYaw;
+	public SyncableDouble targetSpeed;
 
-	private EntityCannon cannon = null;
-
-	public SyncableDouble pitch = new SyncableDouble();
-	public SyncableDouble yaw = new SyncableDouble();
-	public SyncableInt cannonId = new SyncableInt(0);
-	public SyncableInt ridingEntity = new SyncableInt(0);
+	public double currentPitch = 45;
+	public double currentYaw = 0;
+	public double currentSpeed = 1.4;
 
 	public double motionX = 0;
 	public double motionY = 0;
@@ -36,50 +40,44 @@ public class TileEntityCannon extends NetworkedTileEntity implements IAwareTile 
 
 	public boolean renderLine = true;
 
-	public enum Keys {
-		pitch,
-		yaw,
-		cannonId,
-		ridingEntity
+	private int ticksSinceLastFire = Integer.MAX_VALUE;
+
+	public TileEntityCannon() {}
+
+	@Override
+	protected void createSyncedFields() {
+		targetPitch = new SyncableDouble();
+		targetYaw = new SyncableDouble();
+		targetSpeed = new SyncableDouble(1.4);
 	}
 
-	public TileEntityCannon() {
-		addSyncedObject(Keys.pitch, pitch);
-		addSyncedObject(Keys.yaw, yaw);
-		addSyncedObject(Keys.cannonId, cannonId);
-		addSyncedObject(Keys.ridingEntity, ridingEntity);
+	@Override
+	@SideOnly(Side.CLIENT)
+	public void prepareForInventoryRender(Block block, int metadata) {
+		super.prepareForInventoryRender(block, metadata);
+		renderLine = false;
 	}
 
 	@Override
 	public void updateEntity() {
 		super.updateEntity();
-		if (cannon == null) {
-			ridingEntity.setValue(0);
-		}
-		if (cannon != null && cannon.riddenByEntity instanceof EntityPlayer) {
-			EntityPlayer player = (EntityPlayer) cannon.riddenByEntity;
-			double p = player.rotationPitch;
-			double y = player.rotationYawHead;
-			pitch.setValue(p);
-			yaw.setValue(y);
-			sync();
+
+		// ugly, need to clean
+		currentPitch = currentPitch - ((currentPitch - targetPitch.getValue()) / 20);
+
+		currentYaw = GeometryUtils.normalizeAngle(currentYaw);
+		final double targetYaw = GeometryUtils.normalizeAngle(this.targetYaw.getValue());
+		if (Math.abs(currentYaw - targetYaw) < YAW_CHANGE_SPEED) currentYaw = targetYaw;
+		else {
+			double dist = GeometryUtils.getAngleDistance(currentYaw, targetYaw);
+			currentYaw += YAW_CHANGE_SPEED * Math.signum(dist);
 		}
 
-		if (cannon != null && cannon.riddenByEntity instanceof EntityPlayer) {
-			EntityPlayer player = (EntityPlayer) cannon.riddenByEntity;
-			Vec3 pos = getPositionDistanceAway(-0.7, player.rotationPitch, player.rotationYawHead + 90);
-			if (worldObj.isRemote) {
-				cannon.posX = pos.xCoord + 0.5 + xCoord;
-				cannon.posY = yCoord;
-				cannon.posZ = pos.zCoord + 0.5 + zCoord;
-				cannon.setPosition(cannon.posX, cannon.posY, cannon.posZ);
-				if (player != null) {
-					player.setPosition(cannon.posX, cannon.posY + 1.0, cannon.posZ);
-				}
-			}
-		}
+		currentSpeed = currentSpeed - ((currentSpeed - targetSpeed.getValue()) / 20);
+		getMotionFromAngles();
 
 		if (!worldObj.isRemote) {
+
 			if (worldObj.getWorldTime() % 20 == 0) {
 				if (worldObj.isBlockIndirectlyGettingPowered(xCoord, yCoord, zCoord)) {
 					for (ForgeDirection direction : ForgeDirection.VALID_DIRECTIONS) {
@@ -88,13 +86,14 @@ public class TileEntityCannon extends NetworkedTileEntity implements IAwareTile 
 							ItemStack stack = InventoryUtils.removeNextItemStack(inventory);
 							if (stack != null) {
 								getMotionFromAngles();
-								EntityItem item = new EntityItem(worldObj, xCoord + 0.5, yCoord + 0.5, zCoord + 0.5, stack);
+								new TileEntityMessageEventPacket(this).sendToWatchers((WorldServer)worldObj);
+								EntityItem item = new EntityItemProjectile(worldObj, xCoord + 0.5, yCoord + 0.5, zCoord + 0.5, stack);
 								item.delayBeforeCanPickup = 20;
-								item.motionX = motionX * 1.4;
-								item.motionY = motionY * 1.4;
-								item.motionZ = motionZ * 1.4;
+								item.motionX = motionX * currentSpeed;
+								item.motionY = motionY * currentSpeed;
+								item.motionZ = motionZ * currentSpeed;
 								worldObj.spawnEntityInWorld(item);
-								worldObj.playSoundEffect(xCoord + 0.5, yCoord + 0.5, zCoord + 0.5, "openblocks:mortar", 0.2f, 1.0f);
+								worldObj.playSoundEffect(xCoord + 0.5, yCoord + 0.5, zCoord + 0.5, "openblocks:cannon", 0.2f, 1.0f);
 								break;
 							}
 						}
@@ -102,7 +101,26 @@ public class TileEntityCannon extends NetworkedTileEntity implements IAwareTile 
 
 				}
 			}
+		} else {
+			if (ticksSinceLastFire < 100) {
+				ticksSinceLastFire++;
+			}
 		}
+	}
+
+	@Override
+	public void onEvent(TileEntityMessageEventPacket event) {
+		ticksSinceLastFire = 0;
+		double pitchRad = Math.toRadians(currentYaw - 90);
+		double x = -0.5 * Math.cos(pitchRad);
+		double z = -0.5 * Math.sin(pitchRad);
+		for (int i = 0; i < 20; i++) {
+			worldObj.spawnParticle((i < 4? "large" : "") + "smoke", x + xCoord + 0.3 + (worldObj.rand.nextDouble() * 0.4), yCoord + 0.7, z + zCoord + 0.3 + (worldObj.rand.nextDouble() * 0.4), 0.0D, 0.0D, 0.0D);
+		}
+	}
+
+	public int getTicksSinceLastFire() {
+		return ticksSinceLastFire;
 	}
 
 	@Override
@@ -113,78 +131,48 @@ public class TileEntityCannon extends NetworkedTileEntity implements IAwareTile 
 	}
 
 	@Override
-	public void onBlockBroken() {}
-
-	@Override
-	public void onBlockAdded() {}
-
-	private Vec3 getPositionDistanceAway(double distance, double pitch, double yaw) {
-		double p = Math.toRadians(pitch);
-		double y = Math.toRadians(yaw);
-		double k = -0.7;
-		double xzLength = Math.cos(p) * k;
-		double dx = xzLength * Math.cos(y);
-		double dz = xzLength * Math.sin(y);
-		double dy = k * Math.sin(p);
-		return worldObj.getWorldVec3Pool().getVecFromPool(dx, dy, dz);
-	}
-
-	@Override
-	public boolean onBlockActivated(EntityPlayer player, int side, float hitX, float hitY, float hitZ) {
-		if (!worldObj.isRemote && !player.isSneaking()) {
-			cannon = new EntityCannon(worldObj, xCoord, yCoord, zCoord);
-			worldObj.spawnEntityInWorld(cannon);
-			player.rotationPitch = player.prevRotationPitch = (float)pitch.getValue();
-			player.renderYawOffset = player.prevRotationYawHead = player.rotationYawHead = player.prevRotationYaw = player.rotationYaw = (float)yaw.getValue();
-			player.mountEntity(cannon);
-			cannonId.setValue(cannon.entityId);
-			ridingEntity.setValue(player.entityId);
-			sync();
-		}
-		return true;
-	}
-
-	@Override
-	public void onNeighbourChanged(int blockId) {}
-
-	@Override
-	public void onBlockPlacedBy(EntityPlayer player, ForgeDirection side, ItemStack stack, float hitX, float hitY, float hitZ) {}
-
-	@Override
-	public boolean onBlockEventReceived(int eventId, int eventParam) {
-		return false;
-	}
-
-	@Override
-	public void onSynced(List<ISyncableObject> changes) {
+	public void onSynced(Set<ISyncableObject> changes) {
 		getMotionFromAngles();
-		int cId = cannonId.getValue();
-		cannon = null;
-		if (cId > 0) {
-			Entity tmpCannon = worldObj.getEntityByID(cannonId.getValue());
-			if (tmpCannon != null && tmpCannon instanceof EntityCannon && !tmpCannon.isDead) {
-				cannon = (EntityCannon) tmpCannon;
-			}
-		}
-		int playerId = ridingEntity.getValue();
-		if (playerId > 0) {
-			Entity player = worldObj.getEntityByID(ridingEntity.getValue());
-			if (player != null && player instanceof EntityCannon && !player.isDead) {
-				if (cannon != null) {
-					player.ridingEntity = cannon;
-					cannon.riddenByEntity = player;
-				}
-			}
-		}
-
 	}
 
 	private void getMotionFromAngles() {
-		double p = Math.toRadians(pitch.getValue() - 180);
-		double y = Math.toRadians(yaw.getValue());
-		motionX = Math.sin(y) * Math.cos(p);
-		motionY = Math.sin(p);
-		motionZ = -Math.cos(y) * Math.cos(p);
+		double p = Math.toRadians(currentPitch);
+		double y = Math.toRadians(180 - currentYaw);
+		double sinPitch = Math.sin(p);
+		double cosPitch = Math.cos(p);
+		double sinYaw = Math.sin(y);
+		double cosYaw = Math.cos(y);
+
+		motionX = -cosPitch * sinYaw;
+		motionY = sinPitch;
+		motionZ = -cosPitch * cosYaw;
+	}
+
+	public void setTarget(int x, int y, int z) {
+
+		// right, first we get the distance
+		double dX = (xCoord + 0.5) - (x + 0.5);
+		double dY = -(yCoord - y);
+		double dZ = (zCoord + 0.5) - (z + 0.5);
+
+		final double atan2 = Math.atan2(dZ, dX);
+		double yawDegrees = Math.toDegrees(atan2) + 90;
+		System.out.println(String.format("%f %f %f %f", dX, dY, dZ, yawDegrees));
+		targetYaw.setValue(yawDegrees);
+		currentYaw = targetYaw.getValue();
+
+		double[] calc = TileEntityCannonLogic.getVariableVelocityTheta(dX, dY, dZ);
+		double theta = Math.max(calc[0], calc[1]);
+		targetPitch.setValue(Math.toDegrees(theta));
+		currentPitch = targetPitch.getValue();
+
+		// We have selected what we feel to be the best angle
+		// But the velocity suggested doesn't scale on all 3 axis
+		// So we have to change that a bit
+		double d = Math.sqrt(dX * dX + dZ * dZ);
+		double v = Math.sqrt((d * -TileEntityCannonLogic.WORLD_GRAVITY) / Math.sin(2 * theta));
+		targetSpeed.setValue(v);
+		sync();
 	}
 
 	public void disableLineRender() {
@@ -192,17 +180,98 @@ public class TileEntityCannon extends NetworkedTileEntity implements IAwareTile 
 	}
 
 	@Override
-	public void writeToNBT(NBTTagCompound tag) {
-		super.writeToNBT(tag);
-		pitch.writeToNBT(tag, "pitch");
-		yaw.writeToNBT(tag, "yaw");
+	public void onPointingStart(ItemStack itemStack, EntityPlayer player) {
+		player.sendChatToPlayer(ChatMessageComponent.createFromTranslationKey("openblocks.misc.selected_cannon"));
 	}
 
 	@Override
-	public void readFromNBT(NBTTagCompound tag) {
-		super.readFromNBT(tag);
-		pitch.readFromNBT(tag, "pitch");
-		yaw.readFromNBT(tag, "yaw");
+	public void onPointingEnd(ItemStack itemStack, EntityPlayer player, int x, int y, int z) {
+		player.sendChatToPlayer(ChatMessageComponent.createFromTranslationWithSubstitutions("openblocks.misc.pointed_cannon", x, y, z));
+		setTarget(x, y, z);
 	}
 
+	public void setSpeed(double speed) {
+		targetSpeed.setValue(speed);
+		sync();
+	}
+
+	public void setPitch(double pitch2) {
+		targetPitch.setValue(pitch2);
+		sync();
+	}
+
+	public void setYaw(double yaw2) {
+		targetYaw.setValue(yaw2);
+		sync();
+	}
+
+	static class TileEntityCannonLogic {
+
+		/*
+		 * Hello, If you think you can improve the code below to work better,
+		 * all power to you! But please, if you give up and revert your changes.
+		 * Please
+		 * increment the counter below as an increasing warning to the next
+		 * sorry soul
+		 * that thinks they can make this work better. Regards -NC
+		 */
+
+		public static final int HOURS_WASTED_ON_CANNON_LOGIC = 10;
+
+		public static final double CANNON_VELOCITY = 8 * 0.05; // 8
+																// meters/second
+		public static final double WORLD_GRAVITY = -0.8 * 0.05; // World Gravity
+																// in
+																// meters/second/second
+
+		public static double[] getThetaByAngle(double deltaX, double deltaY, double deltaZ, double v) {
+			v += 0.5;
+			double r = Math.sqrt(deltaX * deltaX + deltaZ * deltaZ);
+			double e = Math.atan2(deltaY, r);
+			double g = WORLD_GRAVITY;
+			double c1 = Math.sqrt(Math.pow(v, 4) - g * (g * r * r * Math.pow(Math.cos(e), 2) + 2 * (v * v) * r * Math.sin(e)));
+			double c2 = g * r * Math.cos(e);
+			return new double[] {
+					Math.atan(v * v + c1 / c2),
+					Math.atan(v * v - c1 * c2)
+			};
+		}
+
+		public static double[] getVariableVelocityTheta(double deltaX, double deltaY, double deltaZ) {
+			double velocity = CANNON_VELOCITY;
+			double[] theta = getThetaToPoint(deltaX, deltaY, deltaZ, velocity);
+			int iterations = 100;
+			while (Double.isNaN(theta[0]) && Double.isNaN(theta[1]) && --iterations > 0) {
+				velocity += 0.025;
+				theta = getThetaToPoint(deltaX, deltaY, deltaZ, velocity);
+			}
+			double[] result = new double[3];
+			result[0] = theta[0];
+			result[1] = theta[1];
+			result[2] = velocity;
+			return result;
+		}
+
+		public static double[] getThetaToPoint(double deltaX, double deltaY, double deltaZ, double velocity) {
+			double x = Math.sqrt(deltaX * deltaX + deltaZ * deltaZ);
+			double y = deltaY + 0.4;
+			double v = velocity;
+			double g = WORLD_GRAVITY;
+			double[] theta = new double[2];
+			double mComponent = (v * v * v * v) - g * (g * (x * x) + 2 * (y * (v * v)));
+			if (mComponent < 0) return new double[] { Double.NaN, Double.NaN };
+			mComponent *= 100;
+			mComponent = Math.sqrt(mComponent);
+			mComponent /= 10;
+			mComponent /= (g * x);
+			theta[0] = Math.atan(v * v + mComponent);
+			theta[1] = Math.atan(v * v - mComponent);
+			return theta;
+		}
+	}
+
+	@Override
+	public ForgeDirection getSurfaceDirection() {
+		return ForgeDirection.DOWN;
+	}
 }

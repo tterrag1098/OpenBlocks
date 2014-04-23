@@ -9,7 +9,7 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.pathfinding.PathNavigate;
 import net.minecraft.util.AxisAlignedBB;
 import openblocks.common.entity.EntityLuggage;
-import openblocks.utils.InventoryUtils;
+import openmods.utils.InventoryUtils;
 
 public class EntityAICollectItem extends EntityAIBase {
 
@@ -22,7 +22,7 @@ public class EntityAICollectItem extends EntityAIBase {
 	public EntityAICollectItem(EntityLuggage luggage) {
 		this.luggage = luggage;
 		this.pathFinder = luggage.getNavigator();
-		this.setMutexBits(3);
+		setMutexBits(3);
 	}
 
 	@Override
@@ -35,18 +35,8 @@ public class EntityAICollectItem extends EntityAIBase {
 			double closestDistance = Double.MAX_VALUE;
 			for (EntityItem item : items) {
 				if (!item.isDead && item.onGround) {
-					double dist = item.getDistanceToEntity(luggage); // Check
-																		// that
-																		// the
-																		// stack
-																		// can
-																		// actually
-																		// be
-																		// consumed
-																		// by
-																		// luggage
-					if (closest == null
-							|| dist < closestDistance
+					double dist = item.getDistanceToEntity(luggage);
+					if (dist < closestDistance
 							&& luggage.canConsumeStackPartially(item.getEntityItem())
 							&& !item.isInWater()) {
 						closest = item;

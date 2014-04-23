@@ -2,9 +2,7 @@ package openblocks.common.block;
 
 import net.minecraft.block.material.Material;
 import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.entity.projectile.EntityArrow;
-import net.minecraft.item.ItemStack;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.AxisAlignedBB;
 import net.minecraft.util.Vec3;
@@ -13,9 +11,7 @@ import net.minecraft.world.IBlockAccess;
 import net.minecraft.world.World;
 import net.minecraftforge.common.ForgeDirection;
 import openblocks.Config;
-import openblocks.OpenBlocks;
 import openblocks.common.tileentity.TileEntityTarget;
-import openblocks.utils.BlockUtils;
 
 public class BlockTarget extends OpenBlock {
 
@@ -23,27 +19,8 @@ public class BlockTarget extends OpenBlock {
 
 	public BlockTarget() {
 		super(Config.blockTargetId, Material.ground);
-		setupBlock(this, "target", TileEntityTarget.class);
 		setLightValue(0.3f);
-	}
-
-	@Override
-	public void onBlockPlacedBy(World world, int x, int y, int z, EntityLivingBase entity, ItemStack itemstack) {
-		TileEntity tile = world.getBlockTileEntity(x, y, z);
-		if (tile != null && tile instanceof TileEntityTarget) {
-			TileEntityTarget target = (TileEntityTarget)tile;
-			target.setRotation(BlockUtils.get2dOrientation(entity));
-			target.sync();
-		}
-	}
-
-	@Override
-	public void onNeighborBlockChange(World world, int x, int y, int z, int blockId) {
-		super.onNeighborBlockChange(world, x, y, z, blockId);
-		TileEntity te = world.getBlockTileEntity(x, y, z);
-		if (te != null && te instanceof TileEntityTarget) {
-			((TileEntityTarget)te).neighbourBlockChanged();
-		}
+		setRotationMode(BlockRotationMode.FOUR_DIRECTIONS);
 	}
 
 	@Override
@@ -52,69 +29,65 @@ public class BlockTarget extends OpenBlock {
 	}
 
 	@Override
-	public boolean renderAsNormalBlock() {
+	public boolean shouldRenderBlock() {
 		return false;
-	}
-
-	@Override
-	public int getRenderType() {
-		return OpenBlocks.renderId;
 	}
 
 	@Override
 	public void onEntityCollidedWithBlock(World world, int x, int y, int z, Entity entity) {
 
 		if (!world.isRemote && entity != null && entity instanceof EntityArrow) {
-
-			TileEntity tile = world.getBlockTileEntity(x, y, z);
-
-			if (tile == null || !(tile instanceof TileEntityTarget)) { return; }
-
-			/**
-			 * onEntityCollidedWithBlock is called twice when the arrow is hit
-			 * The first is from the raytracing, which is predictive and
-			 * inaccurate The second is from the bounding box collision. We only
-			 * care about the second one
-			 */
 			if (lastEntityHit != entity.entityId) {
 				lastEntityHit = entity.entityId;
 				return;
 			}
 			lastEntityHit = entity.entityId;
-
-			TileEntityTarget target = (TileEntityTarget)tile;
-
-			if (!target.isEnabled()) { return; }
-
-			ForgeDirection rotation = target.getRotation();
-			ForgeDirection opposite = rotation.getOpposite();
-
-			double centerX = x + 0.5 + (opposite.offsetX * 0.5);
-			double centerY = y + 0.55 + (opposite.offsetY * 0.45);
-			double centerZ = z + 0.5 + (opposite.offsetZ * 0.5);
-
-			double entityX = entity.posX;
-			double entityY = entity.posY;
-			double entityZ = entity.posZ;
-
-			if (opposite == ForgeDirection.NORTH
-					|| opposite == ForgeDirection.SOUTH) {
-				entityZ = centerZ;
-			} else if (opposite == ForgeDirection.EAST
-					|| opposite == ForgeDirection.WEST) {
-				entityX = centerX;
-			}
-
-			Vec3Pool pool = world.getWorldVec3Pool();
-
-			Vec3 bullseye = pool.getVecFromPool(centerX, centerY, centerZ);
-			Vec3 arrow = pool.getVecFromPool(entityX, entityY, entityZ);
-
-			double distance = arrow.distanceTo(bullseye);
-
-			target.setStrength(15 - ((int)Math.min(15, Math.max(0, Math.round(distance * 32)))));
-
+			onTargetHit(world, x, y, z, world.getWorldVec3Pool().getVecFromPool(entity.posX, entity.posY, entity.posZ));
 		}
+	}
+
+	public void onTargetHit(World world, int x, int y, int z, Vec3 entityPosition) {
+
+		if (world.isRemote) { return; }
+
+		TileEntity tile = world.getBlockTileEntity(x, y, z);
+
+		if (tile == null || !(tile instanceof TileEntityTarget)) { return; }
+
+		/**
+		 * onEntityCollidedWithBlock is called twice when the arrow is hit
+		 * The first is from the raytracing, which is predictive and
+		 * inaccurate The second is from the bounding box collision. We only
+		 * care about the second one
+		 */
+
+		TileEntityTarget target = (TileEntityTarget)tile;
+
+		if (!target.isEnabled()) { return; }
+
+		ForgeDirection rotation = target.getRotation();
+		ForgeDirection opposite = rotation.getOpposite();
+
+		double centerX = x + 0.5 + (opposite.offsetX * 0.5);
+		double centerY = y + 0.55 + (opposite.offsetY * 0.45);
+		double centerZ = z + 0.5 + (opposite.offsetZ * 0.5);
+
+		if (opposite == ForgeDirection.NORTH
+				|| opposite == ForgeDirection.SOUTH) {
+			entityPosition.zCoord = centerZ;
+		} else if (opposite == ForgeDirection.EAST
+				|| opposite == ForgeDirection.WEST) {
+			entityPosition.xCoord = centerX;
+		}
+
+		Vec3Pool pool = world.getWorldVec3Pool();
+
+		Vec3 bullseye = pool.getVecFromPool(centerX, centerY, centerZ);
+
+		double distance = entityPosition.distanceTo(bullseye);
+
+		target.setStrength(15 - ((int)Math.min(15, Math.max(0, Math.round(distance * 32)))));
+
 	}
 
 	@Override
@@ -131,13 +104,13 @@ public class BlockTarget extends OpenBlock {
 
 	@Override
 	public AxisAlignedBB getSelectedBoundingBoxFromPool(World world, int x, int y, int z) {
-		this.setBlockBoundsBasedOnState(world, x, y, z);
+		setBlockBoundsBasedOnState(world, x, y, z);
 		return super.getSelectedBoundingBoxFromPool(world, x, y, z);
 	}
 
 	@Override
 	public AxisAlignedBB getCollisionBoundingBoxFromPool(World world, int x, int y, int z) {
-		this.setBlockBoundsBasedOnState(world, x, y, z);
+		setBlockBoundsBasedOnState(world, x, y, z);
 		return super.getCollisionBoundingBoxFromPool(world, x, y, z);
 	}
 
@@ -177,6 +150,6 @@ public class BlockTarget extends OpenBlock {
 
 	@Override
 	public boolean canPlaceBlockOnSide(World world, int x, int y, int z, ForgeDirection side) {
-		return super.canPlaceBlockOnSide(world, x, y, z, ForgeDirection.DOWN);
+		return isOnTopOfSolidBlock(world, x, y, z, side);
 	}
 }

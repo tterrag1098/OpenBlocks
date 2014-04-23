@@ -79,8 +79,7 @@ public class BowEventHandler {
 			int k = EnchantmentHelper.getEnchantmentLevel(Enchantment.power.effectId, bowStack);
 
 			if (k > 0) {
-				entityarrow.setDamage(entityarrow.getDamage() + k
-						* 0.5D + 0.5D);
+				entityarrow.setDamage(entityarrow.getDamage() + k * 0.5D + 0.5D);
 			}
 
 			int l = EnchantmentHelper.getEnchantmentLevel(Enchantment.punch.effectId, bowStack);

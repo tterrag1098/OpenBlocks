@@ -7,14 +7,18 @@ import net.minecraft.world.IBlockAccess;
 import net.minecraft.world.World;
 import net.minecraftforge.common.ForgeDirection;
 import openblocks.Config;
-import openblocks.OpenBlocks;
 import openblocks.common.tileentity.TileEntityBearTrap;
 
 public class BlockBearTrap extends OpenBlock {
 
 	public BlockBearTrap() {
 		super(Config.blockBearTrapId, Material.ground);
-		setupBlock(this, "beartrap", TileEntityBearTrap.class);
+		setRotationMode(BlockRotationMode.FOUR_DIRECTIONS);
+	}
+
+	@Override
+	public boolean shouldRenderBlock() {
+		return false;
 	}
 
 	@Override
@@ -36,11 +40,6 @@ public class BlockBearTrap extends OpenBlock {
 	}
 
 	@Override
-	public int getRenderType() {
-		return OpenBlocks.renderId;
-	}
-
-	@Override
 	public AxisAlignedBB getCollisionBoundingBoxFromPool(World par1World, int x, int y, int z) {
 		return AxisAlignedBB.getAABBPool().getAABB(x, y, z, x + 1.0, y + 0.1, z + 1.0);
 	}
@@ -52,6 +51,7 @@ public class BlockBearTrap extends OpenBlock {
 
 	@Override
 	public boolean canPlaceBlockOnSide(World world, int x, int y, int z, ForgeDirection side) {
-		return super.canPlaceBlockOnSide(world, x, y, z, ForgeDirection.DOWN);
+		return isOnTopOfSolidBlock(world, x, y, z, side);
 	}
+
 }

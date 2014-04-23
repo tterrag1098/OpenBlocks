@@ -11,8 +11,6 @@ import net.minecraft.world.IBlockAccess;
 import net.minecraft.world.World;
 import net.minecraftforge.common.ForgeDirection;
 import openblocks.Config;
-import openblocks.OpenBlocks;
-import openblocks.common.item.ItemFlagBlock;
 import openblocks.common.tileentity.TileEntityFlag;
 import cpw.mods.fml.relauncher.Side;
 import cpw.mods.fml.relauncher.SideOnly;
@@ -47,8 +45,10 @@ public class BlockFlag extends OpenBlock {
 
 	public BlockFlag() {
 		super(Config.blockFlagId, Material.ground);
-		setupBlock(this, "flag", TileEntityFlag.class, ItemFlagBlock.class);
 		setupDimensionsFromCenter(0.5f, 0f, 0.5f, 1 / 16f, 1f, 1 / 16f);
+		setRotationMode(BlockRotationMode.SIX_DIRECTIONS);
+		setPlacementMode(BlockPlacementMode.SURFACE);
+		setInventoryRenderRotation(ForgeDirection.DOWN);
 	}
 
 	@Override
@@ -57,18 +57,13 @@ public class BlockFlag extends OpenBlock {
 	}
 
 	@Override
-	public boolean renderAsNormalBlock() {
+	public boolean shouldRenderBlock() {
 		return false;
 	}
 
 	@Override
 	public boolean isBlockSolidOnSide(World world, int x, int y, int z, ForgeDirection side) {
 		return false;
-	}
-
-	@Override
-	public int getRenderType() {
-		return OpenBlocks.renderId;
 	}
 
 	@Override
@@ -94,27 +89,29 @@ public class BlockFlag extends OpenBlock {
 	@Override
 	public boolean canPlaceBlockOnSide(World world, int x, int y, int z, ForgeDirection side) {
 		if (side == DOWN) {
-			int targetX = x + side.offsetX;
-			int targetY = y + side.offsetY;
-			int targetZ = z + side.offsetZ;
-			int belowBlockId = world.getBlockId(targetX, targetY, targetZ);
+			int belowBlockId = world.getBlockId(x, y - 1, z);
 			Block belowBlock = Block.blocksList[belowBlockId];
 			if (belowBlock != null) {
 				if (belowBlock == Block.fence) {
 					return true;
 				} else if (belowBlock == this) {
-					TileEntityFlag flag = getTileEntity(world, targetX, targetY, targetZ, TileEntityFlag.class);
+					TileEntityFlag flag = getTileEntity(world, x, y - 1, z, TileEntityFlag.class);
 					if (flag != null && flag.getSurfaceDirection().equals(DOWN)) { return true; }
 				}
 			}
-		}
-		return super.canPlaceBlockOnSide(world, x, y, z, side);
+		} else if (side == ForgeDirection.UP) { return false; }
+		return isNeighborBlockSolid(world, x, y, z, side);
 	}
 
 	@Override
 	@SideOnly(Side.CLIENT)
 	public Icon getIcon(int par1, int par2) {
 		return Block.planks.getIcon(par1, par2);
+	}
+
+	@Override
+	public boolean canRotateWithTool() {
+		return false;
 	}
 
 }

@@ -15,11 +15,7 @@ public class ItemLuggage extends Item {
 	public ItemLuggage() {
 		super(Config.itemLuggageId);
 		setCreativeTab(OpenBlocks.tabOpenBlocks);
-	}
-
-	@Override
-	public String getUnlocalizedName(ItemStack itemStack) {
-		return "item.openblocks.luggage";
+		setMaxStackSize(1);
 	}
 
 	@Override
@@ -43,6 +39,9 @@ public class ItemLuggage extends Item {
 					luggage.setSpecial();
 				}
 			}
+
+			if (itemStack.hasDisplayName()) luggage.setCustomNameTag(itemStack.getDisplayName());
+
 			world.spawnEntityInWorld(luggage);
 			itemStack.stackSize--;
 

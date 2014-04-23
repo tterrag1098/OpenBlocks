@@ -1,21 +1,23 @@
 package openblocks.common.block;
 
+import java.util.List;
+
 import net.minecraft.block.material.Material;
-import net.minecraft.entity.item.EntityItem;
-import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.ItemStack;
+import net.minecraft.tileentity.TileEntity;
+import net.minecraft.util.AxisAlignedBB;
+import net.minecraft.util.MovingObjectPosition;
 import net.minecraft.world.World;
 import openblocks.Config;
-import openblocks.OpenBlocks;
-import openblocks.common.item.ItemTrophyBlock;
+import openblocks.common.TrophyHandler.Trophy;
 import openblocks.common.tileentity.TileEntityTrophy;
 
 public class BlockTrophy extends OpenBlock {
 
 	public BlockTrophy() {
 		super(Config.blockTrophyId, Material.ground);
-		setupBlock(this, "trophy", TileEntityTrophy.class, ItemTrophyBlock.class);
-		setBlockBounds(0.3f, 0f, 0.3f, 0.7f, 0.8f, 0.7f);
+		setBlockBounds(0.2f, 0, 0.2f, 0.8f, 0.2f, 0.8f);
+		setRotationMode(BlockRotationMode.FOUR_DIRECTIONS);
 	}
 
 	@Override
@@ -24,36 +26,44 @@ public class BlockTrophy extends OpenBlock {
 	}
 
 	@Override
-	public boolean renderAsNormalBlock() {
+	public boolean shouldRenderBlock() {
+		return true;
+	}
+
+	protected ItemStack getDroppedBlock(TileEntityTrophy te) {
+		if (te != null) {
+			Trophy trophy = te.getTrophy();
+			if (trophy != null) return trophy.getItemStack();
+		}
+
+		return new ItemStack(this, 1, 0);
+	}
+
+	@Override
+	protected void getCustomTileEntityDrops(TileEntity te, List<ItemStack> result) {
+		TileEntityTrophy trophy = (te instanceof TileEntityTrophy)? (TileEntityTrophy)te : null;
+		result.add(getDroppedBlock(trophy));
+	}
+
+	@Override
+	protected boolean hasNormalDrops() {
 		return false;
 	}
 
 	@Override
-	public int getRenderType() {
-		return OpenBlocks.renderId;
+	public ItemStack getPickBlock(MovingObjectPosition target, World world, int x, int y, int z) {
+		TileEntityTrophy te = getTileEntity(world, x, y, z, TileEntityTrophy.class);
+		return getDroppedBlock(te);
 	}
 
 	@Override
-	public boolean removeBlockByPlayer(World world, EntityPlayer player, int x, int y, int z) {
-		if (!world.isRemote
-				&& world.getGameRules().getGameRuleBooleanValue("doTileDrops")) {
-			TileEntityTrophy trophy = getTileEntity(world, x, y, z, TileEntityTrophy.class);
-			if (trophy.trophyType != null) {
-				ItemStack itemStack = trophy.trophyType.getItemStack();
-				float f = 0.7F;
-				float d0 = world.rand.nextFloat() * f + (1.0F - f) * 0.5F;
-				float d1 = world.rand.nextFloat() * f + (1.0F - f) * 0.5F;
-				float d2 = world.rand.nextFloat() * f + (1.0F - f) * 0.5F;
-				EntityItem entityitem = new EntityItem(world, x + d0, y + d1, z + d2, itemStack);
-				entityitem.delayBeforeCanPickup = 10;
-				world.spawnEntityInWorld(entityitem);
-			}
-		}
-		return world.setBlockToAir(x, y, z);
+	public AxisAlignedBB getCollisionBoundingBoxFromPool(World world, int x, int y, int z) {
+		return AxisAlignedBB.getAABBPool().getAABB(x + 0.2, y + 0.0, z + 0.2, x + 0.8, y + 0.8, z + 0.8);
 	}
 
 	@Override
-	protected void dropBlockAsItem_do(World world, int x, int y, int z, ItemStack itemStack) {
-
+	public AxisAlignedBB getSelectedBoundingBoxFromPool(World world, int x, int y, int z) {
+		return AxisAlignedBB.getAABBPool().getAABB(x + 0.2, y + 0.0, z + 0.2, x + 0.8, y + 1.0, z + 0.8);
 	}
+
 }

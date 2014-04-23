@@ -15,8 +15,9 @@ import net.minecraft.util.StatCollector;
 import openblocks.OpenBlocks;
 import openblocks.common.tileentity.TileEntityImaginary;
 import openblocks.common.tileentity.TileEntityImaginary.Property;
-import openblocks.utils.ColorUtils;
-import openblocks.utils.ItemUtils;
+import openmods.utils.ColorUtils;
+import openmods.utils.ColorUtils.ColorMeta;
+import openmods.utils.ItemUtils;
 import cpw.mods.fml.relauncher.Side;
 import cpw.mods.fml.relauncher.SideOnly;
 
@@ -38,8 +39,8 @@ public class ItemImaginationGlasses extends ItemArmor {
 		@Override
 		@SuppressWarnings({ "rawtypes", "unchecked" })
 		public void getSubItems(int itemId, CreativeTabs tab, List result) {
-			for (Integer color : ColorUtils.COLORS.values())
-				result.add(createCrayon(color));
+			for (ColorMeta color : ColorUtils.getAllColors())
+				result.add(createCrayonGlasses(color.rgb));
 		}
 
 		@Override
@@ -47,7 +48,7 @@ public class ItemImaginationGlasses extends ItemArmor {
 			return getGlassesColor(stack);
 		}
 
-		public ItemStack createCrayon(int color) {
+		public ItemStack createCrayonGlasses(int color) {
 			ItemStack stack = new ItemStack(this);
 
 			NBTTagCompound tag = ItemUtils.getItemTag(stack);
@@ -85,7 +86,6 @@ public class ItemImaginationGlasses extends ItemArmor {
 		super(itemId, EnumArmorMaterial.GOLD, 1, ARMOR_HELMET);
 		this.type = type;
 		setCreativeTab(OpenBlocks.tabOpenBlocks);
-		setUnlocalizedName("openblocks.imagination");
 		setHasSubtypes(true);
 	}
 
@@ -93,19 +93,21 @@ public class ItemImaginationGlasses extends ItemArmor {
 		PENCIL("pencil") {
 			@Override
 			protected boolean checkBlock(Property property, ItemStack stack, TileEntityImaginary te) {
-				return te.isPencil();
+				return te.isPencil() ^ te.isInverted();
 			}
 		},
 		CRAYON("crayon") {
 			@Override
 			protected boolean checkBlock(Property property, ItemStack stack, TileEntityImaginary te) {
-				return !te.isPencil() && getGlassesColor(stack) == te.color;
+				return (!te.isPencil() && getGlassesColor(stack) == te.color)
+						^ te.isInverted();
 			}
 		},
 		TECHNICOLOR("technicolor") {
 			@Override
 			protected boolean checkBlock(Property property, ItemStack stack, TileEntityImaginary te) {
-				return property == Property.VISIBLE;
+				if (property == Property.VISIBLE) return true;
+				return te.isInverted();
 			}
 		},
 		BASTARD("admin") {
@@ -115,14 +117,13 @@ public class ItemImaginationGlasses extends ItemArmor {
 			}
 		};
 
-		public final String name;
 		public final String iconName;
 		public final String textureName;
 
 		private Type(String name) {
-			this.name = "item.openblocks.glasses." + name;
 			this.iconName = "openblocks:glasses_" + name;
-			this.textureName = "openblocks:textures/models/glasses_" + name + ".png";
+			this.textureName = "openblocks:textures/models/glasses_" + name
+					+ ".png";
 		}
 
 		protected abstract boolean checkBlock(Property property, ItemStack stack, TileEntityImaginary te);
@@ -154,11 +155,6 @@ public class ItemImaginationGlasses extends ItemArmor {
 	@SuppressWarnings({ "rawtypes", "unchecked" })
 	public void getSubItems(int itemId, CreativeTabs tab, List result) {
 		result.add(new ItemStack(this));
-	}
-
-	@Override
-	public String getUnlocalizedName(ItemStack stack) {
-		return type.name;
 	}
 
 	@Override

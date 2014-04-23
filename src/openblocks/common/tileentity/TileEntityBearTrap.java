@@ -1,43 +1,39 @@
 package openblocks.common.tileentity;
 
-import java.util.List;
+import java.util.Set;
 
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityCreature;
 import net.minecraft.entity.player.EntityPlayer;
-import net.minecraft.item.ItemStack;
 import net.minecraftforge.common.ForgeDirection;
-import openblocks.common.api.IAwareTile;
-import openblocks.common.api.ISurfaceAttachment;
-import openblocks.sync.ISyncableObject;
-import openblocks.sync.SyncableFlags;
-import openblocks.sync.SyncableInt;
-import openblocks.utils.BlockUtils;
+import openmods.api.IActivateAwareTile;
+import openmods.api.ISurfaceAttachment;
+import openmods.sync.ISyncableObject;
+import openmods.sync.SyncableFlags;
+import openmods.sync.SyncableInt;
+import openmods.tileentity.SyncedTileEntity;
 
-public class TileEntityBearTrap extends NetworkedTileEntity implements
-		IAwareTile, ISurfaceAttachment {
-
-	public enum Keys {
-		flags, trappedEntityId
-	}
+public class TileEntityBearTrap extends SyncedTileEntity implements
+		IActivateAwareTile, ISurfaceAttachment {
 
 	public enum Flags {
 		isShut
 	}
 
-	private SyncableFlags flags = new SyncableFlags();
-	private SyncableInt trappedEntityId = new SyncableInt();
+	private SyncableFlags flags;
+	private SyncableInt trappedEntityId;
 
-	public TileEntityBearTrap() {
-		addSyncedObject(Keys.flags, flags);
-		addSyncedObject(Keys.trappedEntityId, trappedEntityId);
+	public TileEntityBearTrap() {}
+
+	@Override
+	protected void createSyncedFields() {
+		flags = new SyncableFlags();
+		trappedEntityId = new SyncableInt();
 		flags.on(Flags.isShut);
 	}
 
 	@Override
-	protected void initialize() {
-
-	}
+	protected void initialize() {}
 
 	@Override
 	public void updateEntity() {
@@ -61,8 +57,9 @@ public class TileEntityBearTrap extends NetworkedTileEntity implements
 				trappedEntity.motionZ = 0;
 			}
 		}
-
-		sync(2, false);
+		if (!worldObj.isRemote) {
+			sync();
+		}
 	}
 
 	public void onEntityCollided(Entity entity) {
@@ -80,14 +77,8 @@ public class TileEntityBearTrap extends NetworkedTileEntity implements
 		return flags.get(Flags.isShut);
 	}
 
-	@Override
-	public void onBlockBroken() {}
-
-	@Override
-	public void onBlockAdded() {}
-
 	public int tickSinceOpened() {
-		return flags.ticksSinceChange(Flags.isShut);
+		return flags.getTicksSinceChange(worldObj);
 	}
 
 	@Override
@@ -102,26 +93,12 @@ public class TileEntityBearTrap extends NetworkedTileEntity implements
 		return true;
 	}
 
-	@Override
-	public void onNeighbourChanged(int blockId) {}
-
-	@Override
-	public void onBlockPlacedBy(EntityPlayer player, ForgeDirection side, ItemStack stack, float hitX, float hitY, float hitZ) {
-		setRotation(BlockUtils.get2dOrientation(player));
-		sync();
-	}
-
-	@Override
-	public boolean onBlockEventReceived(int eventId, int eventParam) {
-		return false;
-	}
-
 	public void setOpen() {
 		flags.set(Flags.isShut, false);
 	}
 
 	@Override
-	public void onSynced(List<ISyncableObject> changes) {}
+	public void onSynced(Set<ISyncableObject> changes) {}
 
 	@Override
 	public ForgeDirection getSurfaceDirection() {

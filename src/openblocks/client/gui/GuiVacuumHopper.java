@@ -1,36 +1,51 @@
 package openblocks.client.gui;
 
-import net.minecraft.client.gui.inventory.GuiContainer;
-import net.minecraft.util.StatCollector;
+import net.minecraft.block.Block;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemStack;
 import openblocks.common.container.ContainerVacuumHopper;
-import openblocks.utils.CompatibilityUtils;
+import openblocks.common.tileentity.TileEntityVacuumHopper;
+import openmods.gui.BaseGuiContainer;
+import openmods.gui.component.BaseComponent.TabColor;
+import openmods.gui.component.*;
 
-import org.lwjgl.opengl.GL11;
+public class GuiVacuumHopper extends BaseGuiContainer<ContainerVacuumHopper> {
 
-public class GuiVacuumHopper extends GuiContainer {
+	private GuiComponentTankLevel xpLevel;
+	private GuiComponentTabs tabs;
+	private GuiComponentSideSelector xpSideSelector;
+	private GuiComponentSideSelector itemSideSelector;
+	private GuiComponentTab xpTab;
+	private GuiComponentTab itemsTab;
+	private GuiComponentLabel xpOutputsLabel;
+	private GuiComponentLabel itemOutputsLabel;
 
 	public GuiVacuumHopper(ContainerVacuumHopper container) {
-		super(container);
-		xSize = 176;
-		ySize = 151;
-	}
+		super(container, 176, 151, "openblocks.gui.vacuumhopper");
 
-	@Override
-	protected void drawGuiContainerBackgroundLayer(float f, int i, int j) {
-		GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
-		int left = (this.width - this.xSize) / 2;
-		int top = (this.height - this.ySize) / 2;
-		CompatibilityUtils.bindTextureToClient("textures/gui/vacuumhopper.png");
-		this.drawTexturedModalRect(left, top, 0, 0, this.xSize, this.ySize);
-	}
+		TileEntityVacuumHopper te = container.getOwner();
 
-	@Override
-	protected void drawGuiContainerForegroundLayer(int mouseX, int mouseY) {
-		String machineName = StatCollector.translateToLocal("openblocks.gui.vacuumhopper");
-		int x = this.xSize / 2 - (fontRenderer.getStringWidth(machineName) / 2);
-		fontRenderer.drawString(machineName, x, 6, 4210752);
-		String translatedName = StatCollector.translateToLocal("container.inventory");
-		fontRenderer.drawString(translatedName, 8, this.ySize - 96 + 2, 4210752);
-	}
+		xpOutputsLabel = new GuiComponentLabel(24, 10, "XP Outputs:");
+		itemOutputsLabel = new GuiComponentLabel(24, 10, "Item Outputs:");
+		xpLevel = new GuiComponentTankLevel(140, 18, 17, 37, te.getTank());
 
+		xpSideSelector = new GuiComponentSideSelector(30, 30, 40.0, te, 0, null, te.getXPOutputs(), false);
+		itemSideSelector = new GuiComponentSideSelector(30, 30, 40.0, te, 0, null, te.getItemOutputs(), false);
+
+		tabs = new GuiComponentTabs(xSize - 3, 4);
+
+		xpTab = new GuiComponentTab(TabColor.blue.getColor(), new ItemStack(Item.expBottle, 1), 100, 100);
+		xpTab.addComponent(xpSideSelector);
+		xpTab.addComponent(xpOutputsLabel);
+
+		itemsTab = new GuiComponentTab(TabColor.lightblue.getColor(), new ItemStack(Block.chest), 100, 100);
+		itemsTab.addComponent(itemSideSelector);
+		itemsTab.addComponent(itemOutputsLabel);
+
+		tabs.addComponent(xpTab);
+		tabs.addComponent(itemsTab);
+
+		root.addComponent(xpLevel);
+		root.addComponent(tabs);
+	}
 }

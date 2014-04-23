@@ -9,8 +9,6 @@ import net.minecraft.world.IBlockAccess;
 import net.minecraft.world.World;
 import openblocks.Config;
 import openblocks.OpenBlocks;
-import openblocks.common.item.ItemOpenBlock;
-import cpw.mods.fml.common.registry.GameRegistry;
 import cpw.mods.fml.relauncher.Side;
 import cpw.mods.fml.relauncher.SideOnly;
 
@@ -22,11 +20,8 @@ public class BlockLadder extends BlockTrapDoor {
 		super(Config.blockLadderId, Material.wood);
 		setHardness(3.0F);
 		setStepSound(soundWoodFootstep);
-		String modKey = OpenBlocks.getModId().toLowerCase();
-		GameRegistry.registerBlock(this,ItemOpenBlock.class,modKey + "_ladder");
-		setUnlocalizedName(modKey + ".ladder");
 		setCreativeTab(OpenBlocks.tabOpenBlocks);
-		this.setBlockBounds(0f, 0f, 0f, 1.5f, 1f, 1.5f);
+		setBlockBounds(0f, 0f, 0f, 1.5f, 1f, 1.5f);
 	}
 
 	@Override
@@ -41,20 +36,20 @@ public class BlockLadder extends BlockTrapDoor {
 
 	@Override
 	public AxisAlignedBB getCollisionBoundingBoxFromPool(World par1World, int par2, int par3, int par4) {
-		this.setBlockBoundsBasedOnState(par1World, par2, par3, par4);
+		setBlockBoundsBasedOnState(par1World, par2, par3, par4);
 		return super.getCollisionBoundingBoxFromPool(par1World, par2, par3, par4);
 	}
 
 	@Override
 	@SideOnly(Side.CLIENT)
 	public AxisAlignedBB getSelectedBoundingBoxFromPool(World par1World, int par2, int par3, int par4) {
-		this.setBlockBoundsBasedOnState(par1World, par2, par3, par4);
+		setBlockBoundsBasedOnState(par1World, par2, par3, par4);
 		return super.getSelectedBoundingBoxFromPool(par1World, par2, par3, par4);
 	}
 
 	@Override
 	public void setBlockBoundsBasedOnState(IBlockAccess par1IBlockAccess, int par2, int par3, int par4) {
-		this.setBlockBoundsForBlockRender(par1IBlockAccess.getBlockMetadata(par2, par3, par4));
+		setBlockBoundsForBlockRender(par1IBlockAccess.getBlockMetadata(par2, par3, par4));
 	}
 
 	@Override
@@ -63,26 +58,26 @@ public class BlockLadder extends BlockTrapDoor {
 		float f = 0.125F;
 
 		if ((par1 & 8) != 0) {
-			this.setBlockBounds(0.0F, 1.0F - f, 0.0F, 1.0F, 1.0F, 1.0F);
+			setBlockBounds(0.0F, 1.0F - f, 0.0F, 1.0F, 1.0F, 1.0F);
 		} else {
-			this.setBlockBounds(0.0F, 0.0F, 0.0F, 1.0F, f, 1.0F);
+			setBlockBounds(0.0F, 0.0F, 0.0F, 1.0F, f, 1.0F);
 		}
 
 		if (isTrapdoorOpen(par1)) {
 			if ((par1 & 3) == 0) {
-				this.setBlockBounds(0.0F, 0.0F, 1.0F - f, 1.0F, 1.0F, 1.0F);
+				setBlockBounds(0.0F, 0.0F, 1.0F - f, 1.0F, 1.0F, 1.0F);
 			}
 
 			if ((par1 & 3) == 1) {
-				this.setBlockBounds(0.0F, 0.0F, 0.0F, 1.0F, 1.0F, f);
+				setBlockBounds(0.0F, 0.0F, 0.0F, 1.0F, 1.0F, f);
 			}
 
 			if ((par1 & 3) == 2) {
-				this.setBlockBounds(1.0F - f, 0.0F, 0.0F, 1.0F, 1.0F, 1.0F);
+				setBlockBounds(1.0F - f, 0.0F, 0.0F, 1.0F, 1.0F, 1.0F);
 			}
 
 			if ((par1 & 3) == 3) {
-				this.setBlockBounds(0.0F, 0.0F, 0.0F, f, 1.0F, 1.0F);
+				setBlockBounds(0.0F, 0.0F, 0.0F, f, 1.0F, 1.0F);
 			}
 		}
 	}
@@ -101,5 +96,4 @@ public class BlockLadder extends BlockTrapDoor {
 	public int getRenderType() {
 		return 0;
 	}
-
 }

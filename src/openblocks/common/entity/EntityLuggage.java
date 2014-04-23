@@ -10,17 +10,20 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.world.World;
 import openblocks.OpenBlocks;
-import openblocks.common.GenericInventory;
+import openblocks.OpenBlocksGuiHandler;
 import openblocks.common.entity.ai.EntityAICollectItem;
-import openblocks.utils.BlockUtils;
+import openmods.GenericInventory;
+import openmods.IInventoryProvider;
+import openmods.utils.BlockUtils;
+import openmods.utils.InventoryUtils;
 
+import com.google.common.base.Strings;
 import com.google.common.io.ByteArrayDataInput;
 import com.google.common.io.ByteArrayDataOutput;
 
 import cpw.mods.fml.common.registry.IEntityAdditionalSpawnData;
 
-public class EntityLuggage extends EntityTameable implements
-		IEntityAdditionalSpawnData {
+public class EntityLuggage extends EntityTameable implements IInventoryProvider, IEntityAdditionalSpawnData {
 
 	protected GenericInventory inventory = new GenericInventory("luggage", false, 27);
 	public boolean special;
@@ -29,14 +32,13 @@ public class EntityLuggage extends EntityTameable implements
 
 	public EntityLuggage(World world) {
 		super(world);
-		// Handled in renderer
-		// this.texture = OpenBlocks.getTexturesPath("models/luggage.png");
-		this.setSize(0.5F, 0.5F);
+		setSize(0.5F, 0.5F);
 		setAIMoveSpeed(0.7F);
 		setMoveForward(0);
 		setTamed(true);
-		this.getNavigator().setAvoidsWater(true);
-		this.getNavigator().setCanSwim(true);
+		func_110163_bv(); // set persistent
+		getNavigator().setAvoidsWater(true);
+		getNavigator().setCanSwim(true);
 		this.tasks.addTask(1, new EntityAISwimming(this));
 		this.tasks.addTask(2, new EntityAIFollowOwner(this, getAIMoveSpeed(), 10.0F, 2.0F));
 		this.tasks.addTask(3, new EntityAICollectItem(this));
@@ -76,6 +78,7 @@ public class EntityLuggage extends EntityTameable implements
 		return true;
 	}
 
+	@Override
 	public GenericInventory getInventory() {
 		return inventory;
 	}
@@ -87,28 +90,32 @@ public class EntityLuggage extends EntityTameable implements
 
 	@Override
 	public boolean interact(EntityPlayer player) {
-		if (!worldObj.isRemote) {
+		if (!worldObj.isRemote && !isDead) {
 			if (player.isSneaking()) {
 				ItemStack luggageItem = new ItemStack(OpenBlocks.Items.luggage);
 				NBTTagCompound tag = new NBTTagCompound();
 				inventory.writeToNBT(tag);
 				luggageItem.setTagCompound(tag);
+
+				String nameTag = getCustomNameTag();
+				if (!Strings.isNullOrEmpty(nameTag)) luggageItem.setItemName(nameTag);
+
 				BlockUtils.dropItemStackInWorld(worldObj, posX, posY, posZ, luggageItem);
 				setDead();
 			} else {
-				player.openGui(OpenBlocks.instance, OpenBlocks.Gui.Luggage.ordinal(), player.worldObj, entityId, 0, 0);
+				player.openGui(OpenBlocks.instance, OpenBlocksGuiHandler.GuiId.luggage.ordinal(), player.worldObj, entityId, 0, 0);
 			}
 		}
 		return true;
 	}
 
 	public boolean canConsumeStackPartially(ItemStack stack) {
-		return BlockUtils.testInventoryInsertion(inventory, stack) > 0;
+		return InventoryUtils.testInventoryInsertion(inventory, stack) > 0;
 	}
 
 	@Override
 	protected void playStepSound(int par1, int par2, int par3, int par4) {
-		this.playSound("openblocks:feet", 0.3F, 0.7F + (worldObj.rand.nextFloat() * 0.5f));
+		playSound("openblocks:feet", 0.3F, 0.7F + (worldObj.rand.nextFloat() * 0.5f));
 	}
 
 	@Override
@@ -136,6 +143,11 @@ public class EntityLuggage extends EntityTameable implements
 	}
 
 	@Override
+	protected boolean canDespawn() {
+		return false;
+	}
+
+	@Override
 	public void writeSpawnData(ByteArrayDataOutput data) {
 		data.writeInt(inventory.getSizeInventory());
 	}
@@ -143,5 +155,10 @@ public class EntityLuggage extends EntityTameable implements
 	@Override
 	public void readSpawnData(ByteArrayDataInput data) {
 		inventory = new GenericInventory("luggage", false, data.readInt());
+	}
+
+	@Override
+	public double getMountedYOffset() {
+		return 0.825;
 	}
 }

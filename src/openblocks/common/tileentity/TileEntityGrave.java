@@ -1,64 +1,63 @@
 package openblocks.common.tileentity;
 
 import java.util.List;
+import java.util.Set;
 
+import net.minecraft.block.Block;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityLiving;
 import net.minecraft.entity.monster.EntitySkeleton;
 import net.minecraft.entity.monster.IMob;
 import net.minecraft.entity.passive.EntityBat;
+import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.inventory.IInventory;
+import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
-import net.minecraft.network.INetworkManager;
-import net.minecraft.network.packet.Packet;
-import net.minecraft.network.packet.Packet132TileEntityData;
-import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.AxisAlignedBB;
+import net.minecraftforge.common.FakePlayer;
 import net.minecraftforge.common.ForgeDirection;
-import openblocks.common.GenericInventory;
-import openblocks.common.api.IInventoryContainer;
-import openblocks.common.api.ISurfaceAttachment;
+import openmods.GenericInventory;
+import openmods.IInventoryProvider;
+import openmods.api.INeighbourAwareTile;
+import openmods.api.IPlaceAwareTile;
+import openmods.sync.ISyncableObject;
+import openmods.sync.SyncableString;
+import openmods.tileentity.SyncedTileEntity;
+import cpw.mods.fml.relauncher.Side;
+import cpw.mods.fml.relauncher.SideOnly;
 
-public class TileEntityGrave extends TileEntity implements IInventoryContainer,
-		ISurfaceAttachment {
+public class TileEntityGrave extends SyncedTileEntity implements IPlaceAwareTile, IInventoryProvider, INeighbourAwareTile {
 
-	private ForgeDirection rotation = ForgeDirection.SOUTH;
-	private String perishedUsername;
-	private GenericInventory inventory = new GenericInventory("grave", false, 100);
+	private SyncableString perishedUsername;
 	public boolean onSoil = true;
 	private int ticksSinceLastSound = 0;
 
-	public TileEntityGrave() {
+	private GenericInventory inventory = new GenericInventory("grave", false, 100);
 
+	public TileEntityGrave() {}
+
+	@Override
+	protected void createSyncedFields() {
+		perishedUsername = new SyncableString();
 	}
 
 	@Override
+	@SuppressWarnings("unchecked")
 	public void updateEntity() {
 		super.updateEntity();
 
 		if (worldObj.isRemote) {
-			// System.out.println(ticksSinceLastSound);
 			if (ticksSinceLastSound++ > 100) {
-				// worldObj.playSoundEffect(xCoord + 0.5, yCoord + 0.5, zCoord +
-				// 0.5, "openblocks.grave_ambient", 1.0f, 1.0f);
 				ticksSinceLastSound = 0;
 			}
 		}
 
 		if (!worldObj.isRemote) {
-			if (worldObj.difficultySetting > 0
-					&& worldObj.rand.nextDouble() < 0.002) {
-				@SuppressWarnings("unchecked")
-				List<Entity> mobs = worldObj.getEntitiesWithinAABB(IMob.class, AxisAlignedBB.getAABBPool().getAABB(xCoord, yCoord, zCoord, xCoord + 1, yCoord + 1, zCoord + 1).expand(7, 7, 7));
+			if (worldObj.difficultySetting > 0 && worldObj.rand.nextDouble() < 0.002) {
+				List<Entity> mobs = worldObj.getEntitiesWithinAABB(IMob.class, getBB().expand(7, 7, 7));
 				if (mobs.size() < 5) {
-					EntityLiving living = null;
 					double chance = worldObj.rand.nextDouble();
-					if (chance < 0.5) {
-						living = new EntitySkeleton(worldObj);
-					} else {
-						living = new EntityBat(worldObj);
-					}
-
+					EntityLiving living = chance < 0.5? new EntitySkeleton(worldObj) : new EntityBat(worldObj);
 					living.setPositionAndRotation(xCoord + 0.5, yCoord + 0.5, zCoord + 0.5, worldObj.rand.nextFloat() * 360, 0);
 					if (living.getCanSpawnHere()) {
 						worldObj.spawnEntityInWorld(living);
@@ -69,69 +68,30 @@ public class TileEntityGrave extends TileEntity implements IInventoryContainer,
 	}
 
 	public String getUsername() {
-		return perishedUsername == null? "Unknown" : perishedUsername;
-	}
-
-	public IInventory getLoot() {
-		return inventory;
+		return perishedUsername.getValue();
 	}
 
 	public void setUsername(String username) {
-		this.perishedUsername = username;
+		this.perishedUsername.setValue(username);
 	}
 
 	public void setLoot(IInventory invent) {
 		inventory.copyFrom(invent);
 	}
 
-	public void setRotation(ForgeDirection rotation) {
-		this.rotation = rotation;
-	}
-
-	public ForgeDirection getRotation() {
-		if (rotation == null || rotation == ForgeDirection.UNKNOWN
-				|| rotation == ForgeDirection.UP
-				|| rotation == ForgeDirection.DOWN) {
-			rotation = ForgeDirection.NORTH;
-		}
-		return rotation;
+	public boolean isOnSoil() {
+		return onSoil;
 	}
 
 	@Override
-	public IInventory[] getInternalInventories() {
-		return new IInventory[] { inventory };
-	}
+	public void onSynced(Set<ISyncableObject> changes) {}
 
 	@Override
-	public Packet getDescriptionPacket() {
-		Packet132TileEntityData packet = new Packet132TileEntityData();
-		packet.actionType = 0;
-		packet.xPosition = xCoord;
-		packet.yPosition = yCoord;
-		packet.zPosition = zCoord;
-		NBTTagCompound nbt = new NBTTagCompound();
-		writeToNBT(nbt);
-		packet.customParam1 = nbt;
-		return packet;
-	}
-
-	@Override
-	public void onDataPacket(INetworkManager net, Packet132TileEntityData pkt) {
-		readFromNBT(pkt.customParam1);
-	}
-
-	@Override
-	public void readFromNBT(NBTTagCompound tag) {
-		super.readFromNBT(tag);
-		inventory.readFromNBT(tag);
-		if (tag.hasKey("perishedUsername")) {
-			perishedUsername = tag.getString("perishedUsername");
-		}
-		if (tag.hasKey("rotation")) {
-			rotation = ForgeDirection.getOrientation(tag.getInteger("rotation"));
-		}
-		if (tag.hasKey("onsoil")) {
-			onSoil = tag.getBoolean("onsoil");
+	public void onBlockPlacedBy(EntityPlayer player, ForgeDirection side, ItemStack stack, float hitX, float hitY, float hitZ) {
+		if (!worldObj.isRemote && !(player instanceof FakePlayer)) {
+			setUsername(player.username);
+			if (player.capabilities.isCreativeMode) setLoot(player.inventory);
+			sync();
 		}
 	}
 
@@ -139,17 +99,39 @@ public class TileEntityGrave extends TileEntity implements IInventoryContainer,
 	public void writeToNBT(NBTTagCompound tag) {
 		super.writeToNBT(tag);
 		inventory.writeToNBT(tag);
-		tag.setString("perishedUsername", getUsername());
-		tag.setInteger("rotation", rotation.ordinal());
-		tag.setBoolean("onsoil", onSoil);
 	}
 
 	@Override
-	public ForgeDirection getSurfaceDirection() {
-		return ForgeDirection.DOWN;
+	public void readFromNBT(NBTTagCompound tag) {
+		super.readFromNBT(tag);
+		inventory.readFromNBT(tag);
 	}
 
-	public boolean isOnSoil() {
-		return onSoil;
+	@Override
+	public IInventory getInventory() {
+		return inventory;
 	}
+
+	protected void updateBlockBelow() {
+		int blockId = this.worldObj.getBlockId(xCoord, yCoord - 1, zCoord);
+		Block block = Block.blocksList[blockId];
+		onSoil = (block == Block.dirt || block == Block.grass);
+	}
+
+	@Override
+	public void initialize() {
+		updateBlockBelow();
+	}
+
+	@Override
+	public void onNeighbourChanged(int blockId) {
+		updateBlockBelow();
+	}
+
+	@Override
+	@SideOnly(Side.CLIENT)
+	public AxisAlignedBB getRenderBoundingBox() {
+		return AxisAlignedBB.getAABBPool().getAABB(xCoord, yCoord, zCoord, xCoord + 1, yCoord + 1, zCoord + 1);
+	}
+
 }

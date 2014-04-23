@@ -1,6 +1,7 @@
 package openblocks.common.tileentity;
 
 import java.util.Random;
+import java.util.Set;
 
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.inventory.IInventory;
@@ -8,106 +9,157 @@ import net.minecraft.item.Item;
 import net.minecraft.item.ItemDye;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
-import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.MathHelper;
-import net.minecraftforge.common.FakePlayer;
+import net.minecraft.util.Vec3;
 import net.minecraftforge.common.ForgeDirection;
-import net.minecraftforge.fluids.Fluid;
-import net.minecraftforge.fluids.FluidContainerRegistry;
-import net.minecraftforge.fluids.FluidRegistry;
-import net.minecraftforge.fluids.FluidStack;
-import net.minecraftforge.fluids.FluidTank;
-import net.minecraftforge.fluids.FluidTankInfo;
-import net.minecraftforge.fluids.IFluidHandler;
+import net.minecraftforge.fluids.*;
 import openblocks.Config;
-import openblocks.Log;
 import openblocks.OpenBlocks;
-import openblocks.common.GenericInventory;
-import openblocks.common.api.IAwareTile;
-import openblocks.common.api.ISurfaceAttachment;
-import openblocks.utils.BlockUtils;
-import openblocks.utils.InventoryUtils;
+import openblocks.client.gui.GuiSprinkler;
+import openblocks.common.container.ContainerSprinkler;
+import openmods.GenericInventory;
+import openmods.IInventoryProvider;
+import openmods.OpenMods;
+import openmods.api.IBreakAwareTile;
+import openmods.api.IHasGui;
+import openmods.api.ISurfaceAttachment;
+import openmods.fakeplayer.FakePlayerPool;
+import openmods.fakeplayer.FakePlayerPool.PlayerUser;
+import openmods.fakeplayer.OpenModsFakePlayer;
+import openmods.include.IExtendable;
+import openmods.include.IncludeInterface;
+import openmods.include.IncludeOverride;
+import openmods.liquids.GenericFluidHandler;
+import openmods.sync.ISyncableObject;
+import openmods.sync.SyncableFlags;
+import openmods.sync.SyncableTank;
+import openmods.tileentity.SyncedTileEntity;
+import openmods.utils.BlockUtils;
+import openmods.utils.InventoryUtils;
 
-public class TileEntitySprinkler extends OpenTileEntity implements IAwareTile,
-		ISurfaceAttachment, IFluidHandler, IInventory {
+public class TileEntitySprinkler extends SyncedTileEntity implements IBreakAwareTile, ISurfaceAttachment, IInventoryProvider, IExtendable, IHasGui {
 
-	// erpppppp
-	private FluidStack water = new FluidStack(FluidRegistry.WATER, 1);
+	private static final FluidStack WATER = new FluidStack(FluidRegistry.WATER, 1);
+	private static final ItemStack BONEMEAL = new ItemStack(Item.dyePowder, 1, 15);
 
-	private ItemStack bonemeal = new ItemStack(Item.dyePowder, 1, 15);
-
-	private FluidTank tank = new FluidTank(FluidContainerRegistry.BUCKET_VOLUME);
-
-	private GenericInventory inventory = new GenericInventory("sprinkler", true, 9);
+	private static final Random RANDOM = new Random();
 
 	private boolean hasBonemeal = false;
 
+	public enum Flags {
+		enabled
+	}
+
+	private SyncableFlags flags;
+	private SyncableTank tank;
+
+	public int ticks;
+
+	private final GenericInventory inventory = new GenericInventory("sprinkler", true, 9) {
+		@Override
+		public boolean isItemValidForSlot(int i, ItemStack itemstack) {
+			return itemstack != null && itemstack.isItemEqual(BONEMEAL);
+		}
+	};
+
+	@IncludeInterface
+	private final IFluidHandler tankWrapper = new GenericFluidHandler.Drain(tank);
+
+	@Override
+	protected void createSyncedFields() {
+		flags = new SyncableFlags();
+		tank = new SyncableTank(FluidContainerRegistry.BUCKET_VOLUME, WATER, OpenBlocks.XP_FLUID);
+	}
+
+	private static int selectFromRange(int range) {
+		return RANDOM.nextInt(2 * range + 1) - range;
+	}
+
 	private void attemptFertilize() {
-		if (worldObj == null || worldObj.isRemote) return;
-		if (worldObj.rand.nextDouble() < 1.0 / (hasBonemeal ? Config.sprinklerBonemealFertizizeChance : Config.sprinklerFertilizeChance)) {
-			// http://goo.gl/RpQuk9
-			Random random = worldObj.rand;
-			int x = (random.nextInt(Config.sprinklerEffectiveRange) + 1) * (random.nextBoolean() ? 1 : -1) + xCoord;
-			int z = (random.nextInt(Config.sprinklerEffectiveRange) + 1) * (random.nextBoolean() ? 1 : -1) + zCoord;
-			/* What? Okay think about this.
-			 * i = -1 y = yCoord - 1
-			 * i = 0 y = yCoord - 1
-			 * i = 1 y = yCoord
-			 *
-			 * Is this the intended operation? I've changed it for now -NC
-			 */
-			for (int i = -1; i <= 1; i++) {
-				int y = yCoord + i;
-				try {
-					for (int a = 0; a < 10; a++) {
-							// Mikee, why do we try to apply it 10 times? Is it likely to fail? -NC
-							if (ItemDye.applyBonemeal(bonemeal.copy(), worldObj, x, y, z, new FakePlayer(worldObj, "sprinkler"))) {
-								break;
-							}
+		final int fertilizerChance = hasBonemeal? Config.sprinklerBonemealFertizizeChance : Config.sprinklerFertilizeChance;
+		if (RANDOM.nextDouble() < 1.0 / fertilizerChance) {
+			FakePlayerPool.instance.executeOnPlayer(worldObj, new PlayerUser() {
+				@Override
+				public void usePlayer(OpenModsFakePlayer fakePlayer) {
+					final int x = selectFromRange(Config.sprinklerEffectiveRange) + xCoord;
+					final int z = selectFromRange(Config.sprinklerEffectiveRange) + zCoord;
+
+					for (int i = -1; i <= 1; i++) {
+						int y = yCoord + i;
+
+						if (ItemDye.applyBonemeal(BONEMEAL.copy(), worldObj, x, y, z, fakePlayer))
+						break;
+
 					}
-				} catch(Exception e) {
-					Log.warn(e, "Exception during bonemeal applying");
 				}
-			}
+			});
 		}
 	}
 
+	@Override
+	public Object getServerGui(EntityPlayer player) {
+		return new ContainerSprinkler(player.inventory, this);
+	}
+
+	@Override
+	public Object getClientGui(EntityPlayer player) {
+		return new GuiSprinkler(new ContainerSprinkler(player.inventory, this));
+	}
+
+	@Override
+	public boolean canOpenGui(EntityPlayer player) {
+		return true;
+	}
+
 	private void sprayParticles() {
-		if (worldObj == null || !worldObj.isRemote) return;
-		for (int i = 0; i < 6; i++) {
-			float offset = (i - 2.5f) / 5f;
-			ForgeDirection rotation = getRotation();
-			OpenBlocks.proxy.spawnLiquidSpray(worldObj, water, xCoord + 0.5
-					+ (offset * 0.6 * rotation.offsetX), yCoord, zCoord + 0.5
-					+ (offset * 0.6 * rotation.offsetZ), rotation, getSprayPitch(), 2 * offset);
+		if (tank.getFluidAmount() > 0) {
+			for (int i = 0; i < 6; i++) {
+				float offset = (i - 2.5f) / 5f;
+				ForgeDirection rotation = getRotation();
+
+				Vec3 vec = worldObj.getWorldVec3Pool().getVecFromPool(0, 0, 0);
+
+				float pitch = getSprayPitch();
+
+				double sinPitch = Math.sin(pitch);
+				double cosPitch = Math.cos(pitch);
+
+				if (rotation.offsetZ == 0) {
+					vec.yCoord = Math.abs(cosPitch);
+					vec.zCoord = sinPitch * rotation.offsetX;
+					vec.xCoord = (worldObj.rand.nextDouble() - 0.5) * 2 * offset;
+				} else {
+					vec.yCoord = Math.abs(cosPitch);
+					vec.xCoord = -sinPitch * rotation.offsetZ;
+					vec.zCoord = (worldObj.rand.nextDouble() - 0.5) * 2 * offset;
+				}
+
+				vec.xCoord /= 2;
+				vec.yCoord /= 2;
+				vec.zCoord /= 2;
+
+				OpenBlocks.proxy.spawnLiquidSpray(worldObj, tank.getFluid(), xCoord + 0.5
+						+ (offset * 0.6 * rotation.offsetX), yCoord, zCoord + 0.5
+						+ (offset * 0.6 * rotation.offsetZ), 0.3f, 0.7f, vec);
+			}
 		}
 	}
 
 	@Override
 	public void updateEntity() {
 		super.updateEntity();
+		ticks++;
 		if (!worldObj.isRemote) {
-			if (tank.getFluid() == null || tank.getFluid().amount == 0) {
-				TileEntity below = worldObj.getBlockTileEntity(xCoord, yCoord - 1, zCoord);
-				if (below instanceof IFluidHandler) {
 
-					IFluidHandler belowTank = (IFluidHandler)below;
-					FluidStack drained = belowTank.drain(ForgeDirection.UP, tank.getCapacity(), false);
-					if (drained != null && drained.isFluidEqual(water)) {
-						drained = belowTank.drain(ForgeDirection.UP, tank.getCapacity(), true);
-						if (drained != null) {
-							tank.fill(drained, true);
-						}
-					}
-				}
-			}
+			tank.autoFillFromSides(OpenMods.proxy, 3, this);
 
 			// every 60 ticks drain from the tank
 			// if there's nothing to drain, disable it
-			if (worldObj.getTotalWorldTime() % 1200 == 0) {
-				hasBonemeal = InventoryUtils.consumeInventoryItem(inventory, bonemeal);
+
+			if (ticks % 1200 == 0) {
+				hasBonemeal = InventoryUtils.consumeInventoryItem(inventory, BONEMEAL);
 			}
-			if (worldObj.getTotalWorldTime() % 60 == 0) {
+			if (ticks % 60 == 0) {
 				setEnabled(tank.drain(1, true) != null);
 				sync();
 			}
@@ -118,79 +170,17 @@ public class TileEntitySprinkler extends OpenTileEntity implements IAwareTile,
 		// simplified this action because only one of these will execute
 		// depending on worldObj.isRemote
 		if (isEnabled()) {
-			attemptFertilize();
-			sprayParticles();
+			if (worldObj.isRemote) sprayParticles();
+			else attemptFertilize();
 		}
 	}
 
 	private void setEnabled(boolean b) {
-		setFlag1(b);
+		flags.set(Flags.enabled, b);
 	}
 
 	private boolean isEnabled() {
-		return getFlag1();
-	}
-
-	@Override
-	public int getSizeInventory() {
-		return inventory.getSizeInventory();
-	}
-
-	@Override
-	public ItemStack getStackInSlot(int i) {
-		return inventory.getStackInSlot(i);
-	}
-
-	@Override
-	public ItemStack decrStackSize(int i, int j) {
-		return inventory.decrStackSize(i, j);
-	}
-
-	@Override
-	public ItemStack getStackInSlotOnClosing(int i) {
-		return inventory.getStackInSlotOnClosing(i);
-	}
-
-	@Override
-	public void setInventorySlotContents(int i, ItemStack itemstack) {
-		inventory.setInventorySlotContents(i, itemstack);
-	}
-
-	@Override
-	public String getInvName() {
-		return inventory.getInvName();
-	}
-
-	@Override
-	public boolean isInvNameLocalized() {
-		return inventory.isInvNameLocalized();
-	}
-
-	@Override
-	public int getInventoryStackLimit() {
-		return inventory.getInventoryStackLimit();
-	}
-
-	@Override
-	public boolean isUseableByPlayer(EntityPlayer entityplayer) {
-		return inventory.isUseableByPlayer(entityplayer);
-	}
-
-	@Override
-	public void openChest() {}
-
-	@Override
-	public void closeChest() {}
-
-	@Override
-	public boolean isItemValidForSlot(int i, ItemStack itemstack) {
-		return itemstack != null && itemstack.isItemEqual(bonemeal);
-	}
-
-	@Override
-	public int fill(ForgeDirection from, FluidStack resource, boolean doFill) {
-		if (resource != null && resource.isFluidEqual(water)) { return tank.fill(resource, doFill); }
-		return 0;
+		return flags.get(Flags.enabled);
 	}
 
 	@Override
@@ -199,32 +189,10 @@ public class TileEntitySprinkler extends OpenTileEntity implements IAwareTile,
 	}
 
 	@Override
-	public void onBlockBroken() {}
-
-	@Override
-	public void onBlockAdded() {}
-
-	@Override
-	public boolean onBlockActivated(EntityPlayer player, int side, float hitX, float hitY, float hitZ) {
-		if (player.isSneaking()) { return false; }
-		if (!worldObj.isRemote) {
-			openGui(player, OpenBlocks.Gui.Sprinkler);
+	public void onBlockBroken() {
+		if (!worldObj.isRemote && !worldObj.isAirBlock(xCoord, yCoord, zCoord)) {
+			BlockUtils.dropItemStackInWorld(worldObj, xCoord, yCoord, zCoord, new ItemStack(OpenBlocks.Blocks.sprinkler));
 		}
-		return true;
-	}
-
-	@Override
-	public void onNeighbourChanged(int blockId) {}
-
-	@Override
-	public void onBlockPlacedBy(EntityPlayer player, ForgeDirection side, ItemStack stack, float hitX, float hitY, float hitZ) {
-		setRotation(BlockUtils.get2dOrientation(player));
-		sync();
-	}
-
-	@Override
-	public boolean onBlockEventReceived(int eventId, int eventParam) {
-		return false;
 	}
 
 	public float getSprayPitch() {
@@ -232,10 +200,22 @@ public class TileEntitySprinkler extends OpenTileEntity implements IAwareTile,
 	}
 
 	public float getSprayAngle() {
-		if (isEnabled()) {
-			return MathHelper.sin(worldObj.getTotalWorldTime() * 0.02f) * (float)Math.PI * 0.035f;
-		}
+		if (isEnabled()) { return MathHelper.sin(ticks * 0.02f) * (float)Math.PI * 0.035f; }
 		return 0;
+	}
+
+	@IncludeOverride
+	public boolean canDrain(ForgeDirection from, Fluid fluid) {
+		return false;
+	}
+
+	@Override
+	public void onSynced(Set<ISyncableObject> changes) {}
+
+	@Override
+	@IncludeInterface
+	public IInventory getInventory() {
+		return inventory;
 	}
 
 	@Override
@@ -248,36 +228,5 @@ public class TileEntitySprinkler extends OpenTileEntity implements IAwareTile,
 	public void readFromNBT(NBTTagCompound tag) {
 		super.readFromNBT(tag);
 		inventory.readFromNBT(tag);
-		if (tag.hasKey("rotation")) {
-			byte ordinal = tag.getByte("rotation");
-			setRotation(ForgeDirection.getOrientation(ordinal));
-			sync();
-		}
 	}
-
-	@Override
-	public boolean canFill(ForgeDirection from, Fluid fluid) {
-		return true;
-	}
-
-	@Override
-	public boolean canDrain(ForgeDirection from, Fluid fluid) {
-		return false;
-	}
-
-	@Override
-	public FluidTankInfo[] getTankInfo(ForgeDirection from) {
-		return new FluidTankInfo[] { tank.getInfo() };
-	}
-
-	@Override
-	public FluidStack drain(ForgeDirection from, FluidStack resource, boolean doDrain) {
-		return null;
-	}
-
-	@Override
-	public FluidStack drain(ForgeDirection from, int maxDrain, boolean doDrain) {
-		return null;
-	}
-
 }

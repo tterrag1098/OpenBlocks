@@ -5,6 +5,7 @@ import static openblocks.client.Icons.itemIcon;
 
 import java.util.Iterator;
 import java.util.Map;
+import java.util.NoSuchElementException;
 
 import net.minecraft.client.renderer.texture.IconRegister;
 import net.minecraft.entity.EntityEggInfo;
@@ -13,6 +14,7 @@ import net.minecraftforge.client.event.TextureStitchEvent;
 import net.minecraftforge.event.ForgeSubscribe;
 import openblocks.client.Icons.ComposedIcon;
 import openblocks.client.Icons.IDrawableIcon;
+import openmods.Log;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
@@ -185,6 +187,8 @@ public class SoundIconRegistry {
 
 	private final MappedCategory root = new MappedCategory();
 
+	private Map<String, IDrawableIcon> iconCache = Maps.newConcurrentMap();
+
 	public static final int DEFAULT_COLOR = 0xFFFFFF;
 
 	@ForgeSubscribe
@@ -193,8 +197,21 @@ public class SoundIconRegistry {
 	}
 
 	public IDrawableIcon getIcon(String sound) {
-		Iterable<String> path = Splitter.onPattern("[.:]").split(sound);
-		return root.getIcon(path.iterator());
+		IDrawableIcon result = iconCache.get(sound);
+
+		if (result == null) {
+			try {
+				Iterable<String> path = Splitter.onPattern("[.:]").split(sound);
+				result = root.getIcon(path.iterator());
+			} catch (NoSuchElementException e) {
+				Log.warn("Malformed sound name: %s", sound);
+				result = root.defaultIcon;
+			}
+
+			iconCache.put(sound, result);
+		}
+
+		return result;
 	}
 
 	private static IDrawableIcon simpleIcon(String id, int color) {
@@ -253,9 +270,9 @@ public class SoundIconRegistry {
 		ambient.add("thunder", genericIcon);
 		root.add("ambient", new SkipPath(ambient));
 
-		IDrawableIcon pick = itemIcon("diamond_pickaxe");
+		IDrawableIcon shovel = itemIcon("diamond_shovel");
 		IDrawableIcon boots = itemIcon("diamond_boots");
-		addBlocks(root.add("dig", new MappedCategory()), pick, frameYellow);
+		addBlocks(root.add("dig", new MappedCategory()), shovel, frameYellow);
 		addBlocks(root.add("step", new MappedCategory()), boots, frameGreen);
 
 		root.add("fire", makeFramedBlockIcon("fire_layer_0", frameRed));
@@ -360,12 +377,14 @@ public class SoundIconRegistry {
 		random.add("fizz", simpleIcon("fizz", DEFAULT_COLOR));
 
 		IDrawableIcon apple = makeFramedItemIcon("apple", frameWhite);
+		IDrawableIcon write = makeFramedItemIcon("book_writable", frameWhite);
 
 		MappedCategory openblocks = root.add("openblocks", new MappedCategory());
 		openblocks.defaultIcon = genericIcon;
 		openblocks.add("teleport", unknownIcon);
 		openblocks.add("chump", apple);
 		openblocks.add("slowpokenom", eat);
+		openblocks.add("draw", write);
 
 		MappedCategory records = root.add(CATEGORY_STREAMING, new MappedCategory());
 		records.add("13", makeFramedItemIcon("record_13", frameBlue));
@@ -382,10 +401,7 @@ public class SoundIconRegistry {
 		records.add("wait", makeFramedItemIcon("record_wait", frameBlue));
 
 		/*
-		 * Missing sounds
-		 * ambient.cave
-		 * random.breath
-		 * random.classic_hurt
+		 * Missing sounds ambient.cave random.breath random.classic_hurt
 		 * random.successful_hit
 		 */
 	}

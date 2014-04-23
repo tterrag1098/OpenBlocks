@@ -10,6 +10,8 @@ import cpw.mods.fml.common.TickType;
 
 public class ClientTickHandler implements ITickHandler {
 
+	private static int ticks = 0;
+
 	@Override
 	public void tickStart(EnumSet<TickType> type, Object... tickData) {
 		if (type.contains(TickType.RENDER)) {
@@ -37,12 +39,17 @@ public class ClientTickHandler implements ITickHandler {
 	}
 
 	public void preRenderTick(Minecraft mc, World world, float renderTick) {
-		EntityHangGlider.updateGliders();
+		EntityHangGlider.updateGliders(world);
 	}
 
 	public void clientTick() {
 		if (SoundEventsManager.isPlayerWearingGlasses()) {
 			SoundEventsManager.instance.tickUpdate();
 		}
+		ticks++;
+	}
+
+	public static int getTicks() {
+		return ticks;
 	}
 }

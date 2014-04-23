@@ -3,15 +3,15 @@ package openblocks.common.block;
 import net.minecraft.block.material.Material;
 import net.minecraft.util.AxisAlignedBB;
 import net.minecraft.world.World;
+import net.minecraftforge.common.ForgeDirection;
 import openblocks.Config;
-import openblocks.OpenBlocks;
-import openblocks.common.tileentity.TileEntityCannon;
 
 public class BlockCannon extends OpenBlock {
 
 	public BlockCannon() {
 		super(Config.blockCannonId, Material.ground);
-		setupBlock(this, "cannon", TileEntityCannon.class);
+		setBlockBounds(0.3f, 0, 0.3f, 0.6f, 0.7f, 0.7f);
+		/* I don't think this should rotate */
 	}
 
 	@Override
@@ -20,13 +20,8 @@ public class BlockCannon extends OpenBlock {
 	}
 
 	@Override
-	public boolean renderAsNormalBlock() {
+	public boolean shouldRenderBlock() {
 		return false;
-	}
-
-	@Override
-	public int getRenderType() {
-		return OpenBlocks.renderId;
 	}
 
 	@Override
@@ -34,4 +29,8 @@ public class BlockCannon extends OpenBlock {
 		return null;
 	}
 
+	@Override
+	public boolean canPlaceBlockOnSide(World world, int x, int y, int z, ForgeDirection side) {
+		return isOnTopOfSolidBlock(world, x, y, z, side);
+	}
 }

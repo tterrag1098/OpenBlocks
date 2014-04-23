@@ -6,14 +6,13 @@ import net.minecraft.world.IBlockAccess;
 import net.minecraft.world.World;
 import net.minecraftforge.common.ForgeDirection;
 import openblocks.Config;
-import openblocks.OpenBlocks;
 import openblocks.common.tileentity.TileEntitySprinkler;
 
 public class BlockSprinkler extends OpenBlock {
 
 	public BlockSprinkler() {
 		super(Config.blockSprinklerId, Material.water);
-		setupBlock(this, "sprinkler", TileEntitySprinkler.class);
+		setRotationMode(BlockRotationMode.FOUR_DIRECTIONS);
 	}
 
 	@Override
@@ -22,24 +21,19 @@ public class BlockSprinkler extends OpenBlock {
 	}
 
 	@Override
-	public boolean renderAsNormalBlock() {
+	public boolean shouldRenderBlock() {
 		return false;
 	}
 
 	@Override
-	public int getRenderType() {
-		return OpenBlocks.renderId;
-	}
-
-	@Override
 	public AxisAlignedBB getSelectedBoundingBoxFromPool(World world, int x, int y, int z) {
-		this.setBlockBoundsBasedOnState(world, x, y, z);
+		setBlockBoundsBasedOnState(world, x, y, z);
 		return super.getSelectedBoundingBoxFromPool(world, x, y, z);
 	}
 
 	@Override
 	public AxisAlignedBB getCollisionBoundingBoxFromPool(World world, int x, int y, int z) {
-		this.setBlockBoundsBasedOnState(world, x, y, z);
+		setBlockBoundsBasedOnState(world, x, y, z);
 		return super.getCollisionBoundingBoxFromPool(world, x, y, z);
 	}
 
@@ -58,6 +52,6 @@ public class BlockSprinkler extends OpenBlock {
 
 	@Override
 	public boolean canPlaceBlockOnSide(World world, int x, int y, int z, ForgeDirection side) {
-		return super.canPlaceBlockOnSide(world, x, y, z, ForgeDirection.DOWN);
+		return isOnTopOfSolidBlock(world, x, y, z, side);
 	}
 }
